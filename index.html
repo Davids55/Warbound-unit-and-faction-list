@@ -176,18 +176,107 @@
     let db = { factions: [] };
     let selectedFactionId = null;
     let editingUnitId = null;
+    let useGoogleSheets = true; // Track if using Google Sheets or local storage
 
     // Helpers
     const uid = () => Math.random().toString(36).slice(2,9);
     const qs = s => document.querySelector(s);
     const qsa = s => Array.from(document.querySelectorAll(s));
-    const saveDB = ()=> localStorage.setItem(LS_KEY, JSON.stringify(db));
+    const saveDB = ()=> {
+        if(useGoogleSheets) {
+            // Only sync to Google Sheets if using it
+            // syncToGoogleSheets();
+        } else {
+            localStorage.setItem(LS_KEY, JSON.stringify(db));
+        }
+    };
     const loadDB = ()=> {
         try{
             const raw = localStorage.getItem(LS_KEY);
             db = raw ? JSON.parse(raw) : { factions: [] };
         }catch(e){ db = { factions: [] } }
     };
+    
+    // Parse Google Sheet rows into database format
+    function parseSheetRowsToDatabase(rows) {
+        if(!rows || rows.length < 2) return { factions: [] };
+        
+        const factionMap = new Map();
+        // Skip header row (row 0)
+        for(let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const factionName = row[0]?.trim();
+            const unitName = row[2]?.trim();
+            
+            if(!factionName) continue;
+            
+            if(!factionMap.has(factionName)) {
+                factionMap.set(factionName, {
+                    id: uid(),
+                    name: factionName,
+                    description: row[1]?.trim() || '',
+                    units: []
+                });
+            }
+            
+            if(unitName) {
+                const weapons = row[9]?.split(';').map(w => {
+                    const match = w.trim().match(/(.*?)\((.*?)\)/);
+                    return { id: uid(), name: match?.[1]?.trim() || w.trim(), range: match?.[2]?.trim() || '', type: '', str: '', ap: '', damage: '', attacks: '' };
+                }).filter(w => w.name) || [];
+                
+                const specialRules = row[10]?.split(';').map(r => {
+                    const [title, desc] = r.split(':').map(x => x.trim());
+                    return { id: uid(), title: title || '', desc: desc || '' };
+                }).filter(r => r.title) || [];
+                
+                const unit = {
+                    id: uid(),
+                    name: unitName,
+                    points: Number(row[3]) || 0,
+                    maxModels: Number(row[4]) || 1,
+                    movement: row[5]?.trim() || '',
+                    armour: row[6]?.trim() || '',
+                    wounds: Number(row[7]) || 0,
+                    keywords: row[8]?.trim() || '',
+                    weapons,
+                    specialRules
+                };
+                
+                factionMap.get(factionName).units.push(unit);
+            }
+        }
+        
+        return { factions: Array.from(factionMap.values()) };
+    }
+    
+    // Load from Google Sheets
+    async function loadFromGoogleSheets() {
+        try {
+            const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypXF_lyUiRGbVQYVnxJlOFyNbY2oiLh3B_-5OViyCQQ-_aZydvRVyFQMrWFNO4My0HTw/exec';
+            const SHEET_ID = '11nYoIUHKz7MKpU3ziyQScj-zzgS-MEPsRNRwbONjuqI';
+            
+            const response = await fetch(GOOGLE_SCRIPT_URL + '?sheetId=' + SHEET_ID, { method: 'GET' });
+            const result = await response.json();
+            
+            if(result.success && result.data) {
+                db = parseSheetRowsToDatabase(result.data);
+                useGoogleSheets = true;
+                updateHeaderSource();
+                return true;
+            }
+        } catch(err) {
+            console.log('Could not load from Google Sheets, falling back to local storage:', err);
+        }
+        return false;
+    }
+    
+    function updateHeaderSource() {
+        const header = qs('header .muted');
+        if(header) {
+            header.textContent = useGoogleSheets ? '☁️ Google Sheets' : '💾 Local Storage';
+        }
+    }
 
     // Elements
     const factionList = qs('#factionList'), factionName = qs('#factionName'), factionDesc = qs('#factionDesc'),
@@ -466,7 +555,11 @@
             const reader = new FileReader(); reader.onload = ev=>{
                 try{
                     const parsed = JSON.parse(ev.target.result);
-                    if(parsed && parsed.factions) db = parsed;
+                    if(parsed && parsed.factions) {
+                        db = parsed;
+                        useGoogleSheets = false; // Switch to local storage after import
+                        updateHeaderSource();
+                    }
                     else return alert('Invalid file');
                     saveDB(); renderFactions(); noSelection.style.display='block'; factionDetail.style.display='none';
                 }catch(err){ alert('Error reading file'); }
@@ -478,8 +571,16 @@
     function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function escapeAttr(s){ if(!s) return ''; return s.replace(/"/g,'&quot;'); }
 
-    // Load on start
-    loadDB(); renderFactions(); if(db.factions.length) { selectedFactionId = db.factions[0].id; selectFaction(selectedFactionId);} 
+    // Load on start - try Google Sheets first
+    (async () => {
+        const loaded = await loadFromGoogleSheets();
+        if(!loaded) {
+            loadDB(); // Fallback to local storage
+        }
+        updateHeaderSource();
+        renderFactions(); 
+        if(db.factions.length) { selectedFactionId = db.factions[0].id; selectFaction(selectedFactionId);}
+    })(); 
 
     // Simple keyboard shortcuts
     window.addEventListener('keydown', e=>{
@@ -573,12 +674,13 @@
         });
     }
 
-    syncGoogleSheetsBtn.onclick = syncToGoogleSheets;
-
-    // Auto-sync on save (optional - uncomment to enable)
-    // Hook into existing save operations
-    const originalSaveDB = saveDB;
-    // saveDB = () => { originalSaveDB(); syncToGoogleSheets(); };
+    syncGoogleSheetsBtn.onclick = () => {
+        if(!useGoogleSheets) {
+            alert('⚠️ You are currently using local storage (imported file). Use "Export" to save as JSON.');
+        } else {
+            syncToGoogleSheets();
+        }
+    };
 
 </script>
 </body>
