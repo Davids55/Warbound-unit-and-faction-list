@@ -204,8 +204,9 @@
         // Skip header row (row 0)
         for(let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            const factionName = row[0] != null ? String(row[0]).trim() : '';
-            const unitName = row[2] != null ? String(row[2]).trim() : '';
+            const cell = idx => row[idx] != null ? String(row[idx]).trim() : '';
+            const factionName = cell(0);
+            const unitName = cell(2);
             
             if(!factionName) continue;
             
@@ -213,19 +214,19 @@
                 factionMap.set(factionName, {
                     id: uid(),
                     name: factionName,
-                    description: row[1] != null ? String(row[1]).trim() : '',
+                    description: cell(1),
                     units: []
                 });
             }
             
             if(unitName) {
-                const weaponsText = row[9] != null ? String(row[9]).trim() : '';
+                const weaponsText = cell(9);
                 const weapons = weaponsText.split(';').map(w => {
                     const match = w.trim().match(/(.*?)\((.*?)\)/);
                     return { id: uid(), name: match?.[1]?.trim() || w.trim(), range: match?.[2]?.trim() || '', type: '', str: '', ap: '', damage: '', attacks: '' };
                 }).filter(w => w.name);
                 
-                const rulesText = row[10] != null ? String(row[10]).trim() : '';
+                const rulesText = cell(10);
                 const specialRules = rulesText.split(';').map(r => {
                     const [title, desc] = r.split(':').map(x => x.trim());
                     return { id: uid(), title: title || '', desc: desc || '' };
@@ -236,10 +237,10 @@
                     name: unitName,
                     points: Number(row[3]) || 0,
                     maxModels: Number(row[4]) || 1,
-                    movement: row[5]?.trim() || '',
-                    armour: row[6]?.trim() || '',
+                    movement: cell(5),
+                    armour: cell(6),
                     wounds: Number(row[7]) || 0,
-                    keywords: row[8]?.trim() || '',
+                    keywords: cell(8),
                     weapons,
                     specialRules
                 };
