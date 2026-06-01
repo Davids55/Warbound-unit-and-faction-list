@@ -173,6 +173,8 @@
 <script>
     // Simple localstorage-backed DB
     const LS_KEY = 'factionsDB:v1';
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypXF_lyUiRGbVQYVnxJlOFyNbY2oiLh3B_-5OViyCQQ-_aZydvRVyFQMrWFNO4My0HTw/exec';
+    const SHEET_ID = '11nYoIUHKz7MKpU3ziyQScj-zzgS-MEPsRNRwbONjuqI';
     let db = { factions: [] };
     let selectedFactionId = null;
     let editingUnitId = null;
@@ -183,10 +185,7 @@
     const qs = s => document.querySelector(s);
     const qsa = s => Array.from(document.querySelectorAll(s));
     const saveDB = ()=> {
-        if(useGoogleSheets) {
-            // Only sync to Google Sheets if using it
-            // syncToGoogleSheets();
-        } else {
+        if(!useGoogleSheets) {
             localStorage.setItem(LS_KEY, JSON.stringify(db));
         }
     };
@@ -205,8 +204,8 @@
         // Skip header row (row 0)
         for(let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            const factionName = row[0]?.trim();
-            const unitName = row[2]?.trim();
+            const factionName = row[0] != null ? String(row[0]).trim() : '';
+            const unitName = row[2] != null ? String(row[2]).trim() : '';
             
             if(!factionName) continue;
             
@@ -214,21 +213,23 @@
                 factionMap.set(factionName, {
                     id: uid(),
                     name: factionName,
-                    description: row[1]?.trim() || '',
+                    description: row[1] != null ? String(row[1]).trim() : '',
                     units: []
                 });
             }
             
             if(unitName) {
-                const weapons = row[9]?.split(';').map(w => {
+                const weaponsText = row[9] != null ? String(row[9]).trim() : '';
+                const weapons = weaponsText.split(';').map(w => {
                     const match = w.trim().match(/(.*?)\((.*?)\)/);
                     return { id: uid(), name: match?.[1]?.trim() || w.trim(), range: match?.[2]?.trim() || '', type: '', str: '', ap: '', damage: '', attacks: '' };
-                }).filter(w => w.name) || [];
+                }).filter(w => w.name);
                 
-                const specialRules = row[10]?.split(';').map(r => {
+                const rulesText = row[10] != null ? String(row[10]).trim() : '';
+                const specialRules = rulesText.split(';').map(r => {
                     const [title, desc] = r.split(':').map(x => x.trim());
                     return { id: uid(), title: title || '', desc: desc || '' };
-                }).filter(r => r.title) || [];
+                }).filter(r => r.title);
                 
                 const unit = {
                     id: uid(),
@@ -253,18 +254,30 @@
     // Load from Google Sheets
     async function loadFromGoogleSheets() {
         try {
-            const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypXF_lyUiRGbVQYVnxJlOFyNbY2oiLh3B_-5OViyCQQ-_aZydvRVyFQMrWFNO4My0HTw/exec';
-            const SHEET_ID = '11nYoIUHKz7MKpU3ziyQScj-zzgS-MEPsRNRwbONjuqI';
-            
-            const response = await fetch(GOOGLE_SCRIPT_URL + '?sheetId=' + SHEET_ID, { method: 'GET' });
-            const result = await response.json();
-            
+            console.log('Loading from Google Sheets...');
+            const url = `${GOOGLE_SCRIPT_URL}?sheetId=${encodeURIComponent(SHEET_ID)}`;
+            const response = await fetch(url, { method: 'GET', cache: 'no-cache' });
+            if(!response.ok) {
+                console.warn('Google Sheets fetch failed:', response.status, response.statusText);
+                return false;
+            }
+            const text = await response.text();
+            let result;
+            try {
+                result = JSON.parse(text);
+            } catch (parseError) {
+                console.warn('Google Sheets response is not valid JSON:', text);
+                return false;
+            }
+            window.lastSheetLoad = result;
             if(result.success && result.data) {
                 db = parseSheetRowsToDatabase(result.data);
                 useGoogleSheets = true;
                 updateHeaderSource();
+                console.log('Loaded from Google Sheets:', db);
                 return true;
             }
+            console.warn('Google Sheets returned no data or failed:', result);
         } catch(err) {
             console.log('Could not load from Google Sheets, falling back to local storage:', err);
         }
@@ -575,12 +588,13 @@
     (async () => {
         const loaded = await loadFromGoogleSheets();
         if(!loaded) {
+            useGoogleSheets = false;
             loadDB(); // Fallback to local storage
         }
         updateHeaderSource();
         renderFactions(); 
         if(db.factions.length) { selectedFactionId = db.factions[0].id; selectFaction(selectedFactionId);}
-    })(); 
+    })();
 
     // Simple keyboard shortcuts
     window.addEventListener('keydown', e=>{
@@ -592,9 +606,6 @@
     window._db = db;
 
     // Google Sheets Integration
-    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypXF_lyUiRGbVQYVnxJlOFyNbY2oiLh3B_-5OViyCQQ-_aZydvRVyFQMrWFNO4My0HTw/exec'; // Will be set by user
-    const SHEET_ID = '11nYoIUHKz7MKpU3ziyQScj-zzgS-MEPsRNRwbONjuqI';
-    
     const syncGoogleSheetsBtn = qs('#syncGoogleSheets');
     let isSyncing = false;
 
