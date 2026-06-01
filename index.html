@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wargame Faction DB</title>
+<style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#9aa4b2;--accent:#7dd3fc;--glass:rgba(255,255,255,0.03)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;color:#e6eef6;background:linear-gradient(180deg,#061022 0%,#081328 100%);padding:16px}
+    .app{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:320px 1fr;gap:16px}
+    header{grid-column:1/-1;display:flex;align-items:center;gap:12px}
+    h1{font-size:18px;margin:0;color:var(--accent)}
+    .search{flex:1}
+    input,button,select,textarea{font:inherit}
+    .card{background:var(--card);padding:12px;border-radius:10px;color:#dbeafe;box-shadow:0 1px 0 rgba(255,255,255,0.02)}
+    .muted{color:var(--muted);font-size:13px}
+    .faction-list{display:flex;flex-direction:column;gap:8px;max-height:65vh;overflow:auto;padding-right:6px}
+    .faction-item{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:8px;background:var(--glass);cursor:pointer}
+    .faction-item.active{outline:2px solid rgba(125,211,252,0.12)}
+    .controls{display:flex;gap:6px}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:inherit;padding:6px 8px;border-radius:8px;cursor:pointer}
+    .small{padding:4px 6px;font-size:13px}
+    form{display:flex;flex-direction:column;gap:8px}
+    label{font-size:13px;color:var(--muted)}
+    input[type="text"],input[type="number"],textarea,select{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:8px;border-radius:6px;color:inherit}
+    .row{display:flex;gap:8px}
+    .row > *{flex:1}
+    .units{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+    .unit-card{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:10px;border-radius:8px;display:flex;flex-direction:column;gap:6px}
+    .unit-head{display:flex;justify-content:space-between;align-items:center}
+    .tag{background:rgba(125,211,252,0.08);padding:4px 6px;border-radius:6px;font-size:12px;color:var(--accent)}
+    .chips{display:flex;gap:6px;flex-wrap:wrap}
+    .chip{background:rgba(255,255,255,0.03);padding:4px 6px;border-radius:999px;font-size:12px}
+    .weap-list,.rule-list{display:flex;flex-direction:column;gap:6px}
+    .weap{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .weap > *{font-size:13px}
+    .muted-small{font-size:13px;color:var(--muted)}
+    .empty{padding:20px;text-align:center;color:var(--muted)}
+    footer{grid-column:1/-1;text-align:center;color:var(--muted);margin-top:8px;font-size:13px}
+    @media (max-width:880px){.app{grid-template-columns:1fr;}.faction-list{max-height:200px}}
+</style>
+</head>
+<body>
+<div class="app">
+    <header>
+        <h1>Faction / Unit Database</h1>
+        <input id="globalSearch" class="search card" placeholder="Search factions or units..." />
+        <button id="syncGoogleSheets" title="Sync to Google Sheets" class="small">📊 Sync</button>
+        <div class="muted">LocalStorage DB</div>
+    </header>
+
+    <aside class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="muted">Factions</div>
+            <div class="controls">
+                <button id="importBtn" title="Import JSON" class="small">Import</button>
+                <button id="exportBtn" title="Export JSON" class="small">Export</button>
+            </div>
+        </div>
+
+        <div class="faction-list" id="factionList"></div>
+
+        <form id="factionForm" style="margin-top:10px">
+            <label>Faction Name</label>
+            <input id="factionName" placeholder="New faction name" required />
+            <label>Description (optional)</label>
+            <textarea id="factionDesc" rows="2" placeholder="Short description"></textarea>
+            <div style="display:flex;gap:8px">
+                <button id="saveFaction" type="button">Save</button>
+                <button id="newFaction" type="button" class="small">New</button>
+                <button id="deleteFaction" type="button" class="small">Delete</button>
+            </div>
+        </form>
+    </aside>
+
+    <main class="card">
+        <div id="detailArea">
+            <div id="noSelection" class="empty">Select a faction or create one to begin.</div>
+
+            <div id="factionDetail" style="display:none">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+                    <div>
+                        <h2 id="factionTitle" style="margin:0"></h2>
+                        <div id="factionDescription" class="muted-small"></div>
+                    </div>
+                    <div class="muted-small">Units: <span id="unitCount">0</span></div>
+                </div>
+
+                <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+                    <input id="unitSearch" placeholder="Filter units by name/keyword/special rule..." style="flex:1;padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04)" />
+                    <button id="openUnitForm">Add Unit</button>
+                </div>
+
+                <div class="units" id="unitsList"></div>
+            </div>
+
+            <div id="unitFormWrap" style="display:none;margin-top:12px">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div class="muted">Unit Editor</div>
+                    <div class="controls">
+                        <button id="cancelUnit" class="small">Cancel</button>
+                        <button id="saveUnit">Save Unit</button>
+                    </div>
+                </div>
+
+                <form id="unitForm" style="margin-top:8px">
+                    <div class="row">
+                        <label style="flex:1">
+                            Name
+                            <input id="unitName" required placeholder="Unit name" />
+                        </label>
+                        <label style="width:120px">
+                            Points
+                            <input id="unitPoints" type="number" min="0" />
+                        </label>
+                    </div>
+
+                    <div class="row">
+                        <label>
+                            Max Models
+                            <input id="unitMax" type="number" min="1" />
+                        </label>
+                        <label>
+                            Movement
+                            <input id="unitMove" placeholder="e.g., 6\"" />
+                        </label>
+                        <label>
+                            Armour
+                            <input id="unitArmour" placeholder="e.g., 3+" />
+                        </label>
+                        <label>
+                            Wounds
+                            <input id="unitWounds" type="number" min="0" />
+                        </label>
+                    </div>
+
+                    <label>Keywords (comma separated)</label>
+                    <input id="unitKeywords" placeholder="Infantry, Fast Attack, etc." />
+
+                    <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+                        <div style="flex:1">
+                            <label class="muted">Weapons</label>
+                            <div class="weap-list card" id="weapList" style="padding:8px">
+                                <!-- dynamic -->
+                            </div>
+                            <div style="display:flex;gap:8px;margin-top:6px">
+                                <button id="addWeap" type="button" class="small">+ Weapon</button>
+                                <button id="clearWeaps" type="button" class="small">Clear</button>
+                            </div>
+                        </div>
+
+                        <div style="flex:1">
+                            <label class="muted">Special Rules</label>
+                            <div class="rule-list card" id="ruleList" style="padding:8px">
+                                <!-- dynamic -->
+                            </div>
+                            <div style="display:flex;gap:8px;margin-top:6px">
+                                <button id="addRule" type="button" class="small">+ Rule</button>
+                                <button id="clearRules" type="button" class="small">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="muted">Responsive, local, searchable faction & unit database</footer>
+</div>
+
+<script>
+    // Simple localstorage-backed DB
+    const LS_KEY = 'factionsDB:v1';
+    let db = { factions: [] };
+    let selectedFactionId = null;
+    let editingUnitId = null;
+
+    // Helpers
+    const uid = () => Math.random().toString(36).slice(2,9);
+    const qs = s => document.querySelector(s);
+    const qsa = s => Array.from(document.querySelectorAll(s));
+    const saveDB = ()=> localStorage.setItem(LS_KEY, JSON.stringify(db));
+    const loadDB = ()=> {
+        try{
+            const raw = localStorage.getItem(LS_KEY);
+            db = raw ? JSON.parse(raw) : { factions: [] };
+        }catch(e){ db = { factions: [] } }
+    };
+
+    // Elements
+    const factionList = qs('#factionList'), factionName = qs('#factionName'), factionDesc = qs('#factionDesc'),
+                saveFactionBtn = qs('#saveFaction'), newFactionBtn = qs('#newFaction'), deleteFactionBtn = qs('#deleteFaction'),
+                factionTitle = qs('#factionTitle'), factionDescription = qs('#factionDescription'), factionDetail = qs('#factionDetail'),
+                noSelection = qs('#noSelection'), unitCount = qs('#unitCount'), unitsList = qs('#unitsList'),
+                openUnitFormBtn = qs('#openUnitForm'), unitFormWrap = qs('#unitFormWrap'), cancelUnitBtn = qs('#cancelUnit'),
+                saveUnitBtn = qs('#saveUnit'), unitForm = qs('#unitForm'), unitName = qs('#unitName'), unitPoints = qs('#unitPoints'),
+                unitMax = qs('#unitMax'), unitMove = qs('#unitMove'), unitArmour = qs('#unitArmour'), unitWounds = qs('#unitWounds'),
+                unitKeywords = qs('#unitKeywords'), weapList = qs('#weapList'), addWeapBtn = qs('#addWeap'),
+                ruleList = qs('#ruleList'), addRuleBtn = qs('#addRule'), clearWeapsBtn = qs('#clearWeaps'), clearRulesBtn = qs('#clearRules'),
+                unitSearch = qs('#unitSearch'), globalSearch = qs('#globalSearch'), exportBtn = qs('#exportBtn'), importBtn = qs('#importBtn');
+
+    // Render factions
+    function renderFactions(filter=''){
+        factionList.innerHTML = '';
+        const q = filter.trim().toLowerCase();
+        db.factions.forEach(f=>{
+            const match = !q || f.name.toLowerCase().includes(q) || (f.description||'').toLowerCase().includes(q) ||
+                                        (f.units||[]).some(u => [u.name, u.keywords, u.specialRules?.map(r=>r.title).join(' ') || ''].join(' ').toLowerCase().includes(q));
+            if(!match) return;
+            const el = document.createElement('div');
+            el.className = 'faction-item' + (f.id===selectedFactionId ? ' active' : '');
+            el.innerHTML = `<div>
+                    <div style="font-weight:600">${escapeHtml(f.name)}</div>
+                    <div class="muted">${escapeHtml((f.description||'').slice(0,80))}</div>
+                </div>
+                <div class="controls">
+                    <button class="small edit-f">Edit</button>
+                </div>`;
+            el.querySelector('.edit-f').onclick = (ev)=>{
+                ev.stopPropagation();
+                selectFaction(f.id);
+            };
+            el.onclick = ()=> selectFaction(f.id);
+            factionList.appendChild(el);
+        });
+    }
+
+    function selectFaction(id){
+        selectedFactionId = id;
+        const f = db.factions.find(x=>x.id===id);
+        if(!f) { noSelection.style.display='block'; factionDetail.style.display='none'; return;}
+        noSelection.style.display='none';
+        factionDetail.style.display='block';
+        factionTitle.textContent = f.name;
+        factionDescription.textContent = f.description || '';
+        factionName.value = f.name;
+        factionDesc.value = f.description || '';
+        renderFactions(globalSearch.value);
+        renderUnits();
+    }
+
+    function renderUnits(filter=''){
+        unitsList.innerHTML = '';
+        const f = db.factions.find(x=>x.id===selectedFactionId);
+        if(!f){ unitCount.textContent='0'; return; }
+        const q = filter.trim().toLowerCase();
+        const units = (f.units||[]).filter(u=>{
+            if(!q) return true;
+            const s = [u.name, u.keywords, u.specialRules?.map(r=>r.title).join(' ')||'', u.weapons?.map(w=>w.name).join(' ')||''].join(' ').toLowerCase();
+            return s.includes(q);
+        });
+        unitCount.textContent = units.length;
+        if(units.length===0){ unitsList.innerHTML='<div class="empty">No units</div>'; return; }
+        units.forEach(u=>{
+            const div = document.createElement('div');
+            div.className='unit-card';
+            div.innerHTML = `
+                <div class="unit-head">
+                    <div>
+                        <div style="font-weight:600">${escapeHtml(u.name)} <span class="tag">${u.points||0} pts</span></div>
+                        <div class="muted-small">${escapeHtml(u.keywords||'')}</div>
+                    </div>
+                    <div class="controls">
+                        <button class="small edit-u">Edit</button>
+                        <button class="small">Delete</button>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <div class="chip">Max: ${u.maxModels||1}</div>
+                    <div class="chip">M: ${escapeHtml(u.movement||'-')}</div>
+                    <div class="chip">A: ${escapeHtml(u.armour||'-')}</div>
+                    <div class="chip">W: ${u.wounds||0}</div>
+                </div>
+                <div style="margin-top:6px">
+                    <div style="font-weight:600;font-size:13px">Weapons</div>
+                    <div style="margin-top:6px" class="muted-small">${renderWeaponsSummary(u.weapons||[])}</div>
+                </div>
+                <div style="margin-top:8px">
+                    <div style="font-weight:600;font-size:13px">Special Rules</div>
+                    <div style="margin-top:6px" class="muted-small">${(u.specialRules||[]).map(r=>`<div><b>${escapeHtml(r.title)}</b>: ${escapeHtml(r.desc)}</div>`).join('') || '<div class="muted-small">None</div>'}</div>
+                </div>
+            `;
+            div.querySelector('.edit-u').onclick = ()=> openUnitEditor(u.id);
+            div.querySelectorAll('.controls button')[1].onclick = ()=> {
+                if(confirm('Delete unit?')){ f.units = (f.units||[]).filter(x=>x.id!==u.id); saveDB(); renderUnits(unitSearch.value); renderFactions(globalSearch.value); }
+            };
+            unitsList.appendChild(div);
+        });
+    }
+
+    function renderWeaponsSummary(weaps){
+        if(!weaps || weaps.length===0) return '<div class="muted-small">None</div>';
+        return weaps.map(w=>`<div>${escapeHtml(w.name)} — ${escapeHtml(w.range||'-')}, ${escapeHtml(w.type||'-')}, S${escapeHtml(w.str||'-')}, AP${escapeHtml(w.ap||'-')}, D${escapeHtml(w.damage||'-')}</div>`).join('');
+    }
+
+    // Forms handling
+    saveFactionBtn.onclick = ()=>{
+        const name = factionName.value.trim();
+        if(!name) return alert('Faction name required');
+        if(selectedFactionId){
+            const f = db.factions.find(x=>x.id===selectedFactionId);
+            if(f){ f.name = name; f.description = factionDesc.value.trim(); }
+        }else{
+            const f = { id: uid(), name, description: factionDesc.value.trim(), units: [] };
+            db.factions.push(f);
+            selectedFactionId = f.id;
+        }
+        saveDB(); renderFactions(globalSearch.value); selectFaction(selectedFactionId);
+    };
+
+    newFactionBtn.onclick = ()=>{
+        selectedFactionId = null;
+        factionName.value = ''; factionDesc.value = '';
+        noSelection.style.display='none'; factionDetail.style.display='none';
+        // create quickly
+        const f = { id: uid(), name: 'New Faction', description: '', units: [] };
+        db.factions.push(f); saveDB(); renderFactions(globalSearch.value); selectFaction(f.id);
+    };
+
+    deleteFactionBtn.onclick = ()=>{
+        if(!selectedFactionId) return;
+        if(!confirm('Delete faction and all units?')) return;
+        db.factions = db.factions.filter(x=>x.id!==selectedFactionId);
+        selectedFactionId = null; saveDB(); renderFactions(globalSearch.value); noSelection.style.display='block'; factionDetail.style.display='none';
+    };
+
+    openUnitFormBtn.onclick = ()=> { openUnitEditor(); };
+
+    function openUnitEditor(unitId=null){
+        const f = db.factions.find(x=>x.id===selectedFactionId);
+        if(!f) return alert('Select a faction first');
+        editingUnitId = unitId;
+        unitFormWrap.style.display='block';
+        if(unitId){
+            const u = f.units.find(x=>x.id===unitId);
+            if(u){
+                unitName.value = u.name; unitPoints.value = u.points||0; unitMax.value = u.maxModels||1;
+                unitMove.value = u.movement||''; unitArmour.value = u.armour||''; unitWounds.value = u.wounds||0;
+                unitKeywords.value = u.keywords||'';
+                renderWeaps(u.weapons||[]); renderRules(u.specialRules||[]);
+            }
+        }else{
+            unitForm.reset();
+            unitKeywords.value=''; renderWeaps([]); renderRules([]);
+        }
+    }
+
+    cancelUnitBtn.onclick = ()=> { unitFormWrap.style.display='none'; editingUnitId = null; };
+
+    saveUnitBtn.onclick = ()=>{
+        const f = db.factions.find(x=>x.id===selectedFactionId);
+        if(!f) return;
+        const payload = {
+            id: editingUnitId || uid(),
+            name: unitName.value.trim() || 'Unnamed',
+            points: Number(unitPoints.value)||0,
+            maxModels: Number(unitMax.value)||1,
+            movement: unitMove.value.trim(),
+            armour: unitArmour.value.trim(),
+            wounds: Number(unitWounds.value)||0,
+            keywords: unitKeywords.value.trim(),
+            weapons: collectWeaps(),
+            specialRules: collectRules()
+        };
+        if(editingUnitId){
+            f.units = f.units.map(u => u.id===editingUnitId ? payload : u);
+        }else{
+            f.units = f.units || []; f.units.push(payload);
+        }
+        saveDB(); unitFormWrap.style.display='none'; editingUnitId = null; renderUnits(unitSearch.value); renderFactions(globalSearch.value);
+    };
+
+    // Weapons UI
+    function renderWeaps(weaps){
+        weapList.innerHTML = '';
+        (weaps||[]).forEach(w=>{
+            const e = weapRow(w);
+            weapList.appendChild(e);
+        });
+    }
+    function weapRow(w={id:uid(),name:'',range:'',type:'',str:'',ap:'',damage:'',attacks:''}){
+        const div = document.createElement('div');
+        div.className='weap';
+        div.innerHTML = `
+            <input class="w-name" placeholder="Name" value="${escapeAttr(w.name)}" />
+            <input class="w-range" placeholder="Range" value="${escapeAttr(w.range)}" />
+            <input class="w-type" placeholder="Type" value="${escapeAttr(w.type)}" />
+            <input class="w-str" placeholder="S" value="${escapeAttr(w.str)}" style="width:52px" />
+            <input class="w-ap" placeholder="AP" value="${escapeAttr(w.ap)}" style="width:52px" />
+            <input class="w-dmg" placeholder="D" value="${escapeAttr(w.damage)}" style="width:52px" />
+            <input class="w-atk" placeholder="Att" value="${escapeAttr(w.attacks)}" style="width:60px" />
+            <button class="small rem">×</button>
+        `;
+        div.querySelector('.rem').onclick = ()=> div.remove();
+        return div;
+    }
+    addWeapBtn.onclick = ()=> weapList.appendChild(weapRow());
+
+    clearWeapsBtn.onclick = ()=> weapList.innerHTML='';
+
+    function collectWeaps(){ return Array.from(weapList.children).map(n=>({
+        id: n.dataset.id||uid(),
+        name: n.querySelector('.w-name').value.trim(),
+        range: n.querySelector('.w-range').value.trim(),
+        type: n.querySelector('.w-type').value.trim(),
+        str: n.querySelector('.w-str').value.trim(),
+        ap: n.querySelector('.w-ap').value.trim(),
+        damage: n.querySelector('.w-dmg').value.trim(),
+        attacks: n.querySelector('.w-atk').value.trim()
+    })).filter(w=>w.name || w.range); }
+
+    // Rules UI
+    function renderRules(rules){
+        ruleList.innerHTML = '';
+        (rules||[]).forEach(r=> ruleList.appendChild(ruleRow(r)));
+    }
+    function ruleRow(r={id:uid(),title:'',desc:''}){
+        const div = document.createElement('div');
+        div.style.display='flex';
+        div.style.gap='6px';
+        div.style.alignItems='center';
+        div.innerHTML = `
+            <input class="r-title" placeholder="Rule title" value="${escapeAttr(r.title)}" />
+            <input class="r-desc" placeholder="Short desc" value="${escapeAttr(r.desc)}" style="flex:1" />
+            <button class="small rem">×</button>
+        `;
+        div.querySelector('.rem').onclick = ()=> div.remove();
+        return div;
+    }
+    addRuleBtn.onclick = ()=> ruleList.appendChild(ruleRow());
+    clearRulesBtn.onclick = ()=> ruleList.innerHTML='';
+
+    function collectRules(){ return Array.from(ruleList.children).map(n=>({
+        id: n.dataset.id||uid(),
+        title: n.querySelector('.r-title').value.trim(),
+        desc: n.querySelector('.r-desc').value.trim()
+    })).filter(r=>r.title); }
+
+    // Edit unit helper
+    function openUnitEditorByObject(u){
+        openUnitEditor(u.id);
+    }
+
+    function openUnitEditorById(id){
+        editingUnitId = id;
+        openUnitEditor(id);
+    }
+
+    // Search handlers
+    globalSearch.addEventListener('input',()=> renderFactions(globalSearch.value));
+    unitSearch.addEventListener('input',()=> renderUnits(unitSearch.value));
+
+    // Export / Import
+    exportBtn.onclick = ()=> {
+        const data = JSON.stringify(db, null, 2);
+        const blob = new Blob([data], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download = 'factions.json'; a.click(); URL.revokeObjectURL(url);
+    };
+    importBtn.onclick = ()=> {
+        const inp = document.createElement('input'); inp.type='file'; inp.accept='application/json';
+        inp.onchange = e => {
+            const f = e.target.files[0]; if(!f) return;
+            const reader = new FileReader(); reader.onload = ev=>{
+                try{
+                    const parsed = JSON.parse(ev.target.result);
+                    if(parsed && parsed.factions) db = parsed;
+                    else return alert('Invalid file');
+                    saveDB(); renderFactions(); noSelection.style.display='block'; factionDetail.style.display='none';
+                }catch(err){ alert('Error reading file'); }
+            }; reader.readAsText(f);
+        }; inp.click();
+    };
+
+    // Utility escape
+    function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function escapeAttr(s){ if(!s) return ''; return s.replace(/"/g,'&quot;'); }
+
+    // Load on start
+    loadDB(); renderFactions(); if(db.factions.length) { selectedFactionId = db.factions[0].id; selectFaction(selectedFactionId);} 
+
+    // Simple keyboard shortcuts
+    window.addEventListener('keydown', e=>{
+        if(e.key==='n' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); newFactionBtn.click();}
+        if(e.key==='k' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); qs('#globalSearch').focus(); }
+    });
+
+    // Expose some helpers for debugging (optional)
+    window._db = db;
+
+    // Google Sheets Integration
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypXF_lyUiRGbVQYVnxJlOFyNbY2oiLh3B_-5OViyCQQ-_aZydvRVyFQMrWFNO4My0HTw/exec'; // Will be set by user
+    const SHEET_ID = '11nYoIUHKz7MKpU3ziyQScj-zzgS-MEPsRNRwbONjuqI';
+    
+    const syncGoogleSheetsBtn = qs('#syncGoogleSheets');
+    let isSyncing = false;
+
+    function formatDatabaseForSheets(){
+        const rows = [];
+        // Header row
+        rows.push(['Faction', 'Description', 'Unit Name', 'Points', 'Max Models', 'Movement', 'Armour', 'Wounds', 'Keywords', 'Weapons', 'Special Rules']);
+        
+        // Data rows
+        db.factions.forEach(f => {
+            const units = f.units || [];
+            if(units.length === 0){
+                rows.push([f.name, f.description||'', '', '', '', '', '', '', '', '', '']);
+            } else {
+                units.forEach((u, idx) => {
+                    const weaponStr = (u.weapons||[]).map(w => `${w.name}(${w.range})`).join('; ');
+                    const rulesStr = (u.specialRules||[]).map(r => `${r.title}: ${r.desc}`).join('; ');
+                    rows.push([
+                        idx === 0 ? f.name : '',
+                        idx === 0 ? f.description||'' : '',
+                        u.name||'',
+                        u.points||'',
+                        u.maxModels||'',
+                        u.movement||'',
+                        u.armour||'',
+                        u.wounds||'',
+                        u.keywords||'',
+                        weaponStr,
+                        rulesStr
+                    ]);
+                });
+            }
+        });
+        return rows;
+    }
+
+    async function syncToGoogleSheets(){
+        if(isSyncing){
+            alert('Sync already in progress...');
+            return;
+        }
+
+        isSyncing = true;
+        syncGoogleSheetsBtn.disabled = true;
+        const originalText = syncGoogleSheetsBtn.textContent;
+        syncGoogleSheetsBtn.textContent = '⏳ Syncing...';
+
+        try {
+            const rows = formatDatabaseForSheets();
+            
+            const response = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sheetId: SHEET_ID, data: rows })
+            });
+            alert('✅ Data synced to Google Sheets!');
+        } catch(error){
+            console.error('Sync error:', error);
+            alert('❌ Error syncing to Google Sheets: ' + error.message);
+        } finally {
+            isSyncing = false;
+            syncGoogleSheetsBtn.disabled = false;
+            syncGoogleSheetsBtn.textContent = originalText;
+        }
+    }
+
+    function copyDataToClipboard(rows){
+        const tsv = rows.map(row => row.map(cell => 
+            typeof cell === 'string' ? cell.replace(/"/g, '""') : cell
+        ).join('\t')).join('\n');
+        
+        navigator.clipboard.writeText(tsv).then(() => {
+            alert('✅ Data copied to clipboard! Paste into Google Sheets.');
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
+    }
+
+    syncGoogleSheetsBtn.onclick = syncToGoogleSheets;
+
+    // Auto-sync on save (optional - uncomment to enable)
+    // Hook into existing save operations
+    const originalSaveDB = saveDB;
+    // saveDB = () => { originalSaveDB(); syncToGoogleSheets(); };
+
+</script>
+</body>
+</html>
