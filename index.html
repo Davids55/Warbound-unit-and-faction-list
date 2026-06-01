@@ -212,7 +212,7 @@
             
             if(!factionMap.has(factionName)) {
                 factionMap.set(factionName, {
-                    id: row[0].trim().toLowerCase().replace(/\s+/g,'-'),
+                    id: uid(),
                     name: factionName,
                     description: row[1]?.trim() || '',
                     units: []
@@ -222,16 +222,16 @@
             if(unitName) {
                 const weapons = row[9]?.split(';').map(w => {
                     const match = w.trim().match(/(.*?)\((.*?)\)/);
-                    return { id: row[0].trim().toLowerCase().replace(/\s+/g,'-'), name: match?.[1]?.trim() || w.trim(), range: match?.[2]?.trim() || '', type: '', str: '', ap: '', damage: '', attacks: '' };
+                    return { id: uid(), name: match?.[1]?.trim() || w.trim(), range: match?.[2]?.trim() || '', type: '', str: '', ap: '', damage: '', attacks: '' };
                 }).filter(w => w.name) || [];
                 
                 const specialRules = row[10]?.split(';').map(r => {
                     const [title, desc] = r.split(':').map(x => x.trim());
-                    return { id: row[0].trim().toLowerCase().replace(/\s+/g,'-'), title: title || '', desc: desc || '' };
+                    return { id: uid(), title: title || '', desc: desc || '' };
                 }).filter(r => r.title) || [];
                 
                 const unit = {
-                    id: row[0].trim().toLowerCase().replace(/\s+/g,'-'),
+                    id: uid(),
                     name: unitName,
                     points: Number(row[3]) || 0,
                     maxModels: Number(row[4]) || 1,
@@ -392,7 +392,7 @@
             const f = db.factions.find(x=>x.id===selectedFactionId);
             if(f){ f.name = name; f.description = factionDesc.value.trim(); }
         }else{
-            const f = { id: row[0].trim().toLowerCase().replace(/\s+/g,'-'), name, description: factionDesc.value.trim(), units: [] };
+            const f = { id: uid(), name, description: factionDesc.value.trim(), units: [] };
             db.factions.push(f);
             selectedFactionId = f.id;
         }
@@ -404,7 +404,7 @@
         factionName.value = ''; factionDesc.value = '';
         noSelection.style.display='none'; factionDetail.style.display='none';
         // create quickly
-        const f = { id: row[0].trim().toLowerCase().replace(/\s+/g,'-'), name: 'New Faction', description: '', units: [] };
+        const f = { id: uid(), name: 'New Faction', description: '', units: [] };
         db.factions.push(f); saveDB(); renderFactions(globalSearch.value); selectFaction(f.id);
     };
 
