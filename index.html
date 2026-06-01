@@ -47,7 +47,7 @@
         <h1>Faction / Unit Database</h1>
         <input id="globalSearch" class="search card" placeholder="Search factions or units..." />
         <button id="syncGoogleSheets" title="Sync to Google Sheets" class="small">📊 Sync</button>
-        <div class="muted">LocalStorage DB</div>
+        <div class="muted" id="dataSourceStatus">Loading...</div>
     </header>
 
     <aside class="card">
@@ -255,10 +255,12 @@
     async function loadFromGoogleSheets() {
         try {
             console.log('Loading from Google Sheets...');
+            updateHeaderSource('Loading from Google Sheets...');
             const url = `${GOOGLE_SCRIPT_URL}?sheetId=${encodeURIComponent(SHEET_ID)}`;
             const response = await fetch(url, { method: 'GET', cache: 'no-cache' });
             if(!response.ok) {
                 console.warn('Google Sheets fetch failed:', response.status, response.statusText);
+                updateHeaderSource('Sheet fetch failed, using local data');
                 return false;
             }
             const text = await response.text();
@@ -267,6 +269,7 @@
                 result = JSON.parse(text);
             } catch (parseError) {
                 console.warn('Google Sheets response is not valid JSON:', text);
+                updateHeaderSource('Sheet response invalid, using local data');
                 return false;
             }
             window.lastSheetLoad = result;
@@ -278,16 +281,25 @@
                 return true;
             }
             console.warn('Google Sheets returned no data or failed:', result);
+            updateHeaderSource('Sheet returned no data, using local data');
         } catch(err) {
             console.log('Could not load from Google Sheets, falling back to local storage:', err);
+            updateHeaderSource('Could not load sheet, using local data');
         }
         return false;
     }
     
-    function updateHeaderSource() {
-        const header = qs('header .muted');
-        if(header) {
-            header.textContent = useGoogleSheets ? '☁️ Google Sheets' : '💾 Local Storage';
+    function updateHeaderSource(message) {
+        const header = qs('#dataSourceStatus');
+        if(!header) return;
+        if(message) {
+            header.textContent = message;
+            return;
+        }
+        if(useGoogleSheets) {
+            header.textContent = db.factions.length ? '☁️ Google Sheets' : '☁️ Google Sheets (empty)';
+        } else {
+            header.textContent = '💾 Local Storage';
         }
     }
 
