@@ -224,7 +224,7 @@
                 const weaponsText = cell(9);
                 const weapons = weaponsText.split(';').map(w => {
                     const match = w.trim().match(/(.*?)\((.*?)\)/);
-                    return { id: uid(), name: match?.[1]?.trim() || w.trim(), range: match?.[2]?.trim() || '', type: '', str: '', ap: '', damage: '', attacks: '' };
+                    return { id: uid(), name: match?.[1]?.trim() || w.trim(), range: match?.[2]?.trim() || '', type: '', str: '', damage: '', attacks: '', rulesKeywords: '' };
                 }).filter(w => w.name);
                 
                 const rulesText = cell(10);
@@ -408,7 +408,7 @@
 
     function renderWeaponsSummary(weaps){
         if(!weaps || weaps.length===0) return '<div class="muted-small">None</div>';
-        return weaps.map(w=>`<div>${escapeHtml(w.name)} — ${escapeHtml(w.range||'-')}, ${escapeHtml(w.type||'-')}, S${escapeHtml(w.str||'-')}, AP${escapeHtml(w.ap||'-')}, D${escapeHtml(w.damage||'-')}</div>`).join('');
+        return weaps.map(w=>`<div>${escapeHtml(w.name)} — ${escapeHtml(w.range||'-')}, ${escapeHtml(w.type||'-')}, S${escapeHtml(w.str||'-')}, D${escapeHtml(w.damage||'-')}${w.rulesKeywords ? ` [${escapeHtml(w.rulesKeywords)}]` : ''}</div>`).join('');
     }
 
     // Forms handling
@@ -496,7 +496,7 @@
             weapList.appendChild(e);
         });
     }
-    function weapRow(w={id:uid(),name:'',range:'',type:'',str:'',ap:'',damage:'',attacks:''}){
+    function weapRow(w={id:uid(),name:'',range:'',type:'',str:'',damage:'',attacks:'',rulesKeywords:''}){
         const div = document.createElement('div');
         div.className='weap';
         div.innerHTML = `
@@ -504,9 +504,9 @@
             <input class="w-range" placeholder="Range" value="${escapeAttr(w.range)}" />
             <input class="w-type" placeholder="Type" value="${escapeAttr(w.type)}" />
             <input class="w-str" placeholder="S" value="${escapeAttr(w.str)}" style="width:52px" />
-            <input class="w-ap" placeholder="AP" value="${escapeAttr(w.ap)}" style="width:52px" />
             <input class="w-dmg" placeholder="D" value="${escapeAttr(w.damage)}" style="width:52px" />
             <input class="w-atk" placeholder="Att" value="${escapeAttr(w.attacks)}" style="width:60px" />
+            <input class="w-rules" placeholder="Rules/Keywords" value="${escapeAttr(w.rulesKeywords)}" style="flex:1" />
             <button class="small rem">×</button>
         `;
         div.querySelector('.rem').onclick = ()=> div.remove();
@@ -522,9 +522,9 @@
         range: n.querySelector('.w-range').value.trim(),
         type: n.querySelector('.w-type').value.trim(),
         str: n.querySelector('.w-str').value.trim(),
-        ap: n.querySelector('.w-ap').value.trim(),
         damage: n.querySelector('.w-dmg').value.trim(),
-        attacks: n.querySelector('.w-atk').value.trim()
+        attacks: n.querySelector('.w-atk').value.trim(),
+        rulesKeywords: n.querySelector('.w-rules').value.trim()
     })).filter(w=>w.name || w.range); }
 
     // Rules UI
