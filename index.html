@@ -33,8 +33,11 @@
     .chips{display:flex;gap:6px;flex-wrap:wrap}
     .chip{background:rgba(255,255,255,0.03);padding:4px 6px;border-radius:999px;font-size:12px}
     .weap-list,.rule-list{display:flex;flex-direction:column;gap:6px}
-    .weap{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .weap{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
     .weap > *{font-size:13px}
+    .weap textarea{overflow:hidden;resize:none;white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:inherit}
+    .rule-row{display:flex;gap:6px;align-items:flex-start;margin-bottom:6px}
+    .rule-row textarea{overflow:hidden;resize:none;white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:inherit}
     .muted-small{font-size:13px;color:var(--muted)}
     .empty{padding:20px;text-align:center;color:var(--muted)}
     footer{grid-column:1/-1;text-align:center;color:var(--muted);margin-top:8px;font-size:13px}
@@ -197,11 +200,14 @@
 </div>
 
 <script>
+    // ===== PASSCODE CONFIGURATION =====
+    const SYNC_PASSCODE = '5523'; // Change this to your desired passcode
+    // ===================================
+
     // Simple localstorage-backed DB
     const LS_KEY = 'factionsDB:v1';
     const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypXF_lyUiRGbVQYVnxJlOFyNbY2oiLh3B_-5OViyCQQ-_aZydvRVyFQMrWFNO4My0HTw/exec';
     const SHEET_ID = '11nYoIUHKz7MKpU3ziyQScj-zzgS-MEPsRNRwbONjuqI';
-    let SYNC_PASSCODE = null; // Loaded from config.json
     let db = { factions: [] };
     let selectedFactionId = null;
     let editingUnitId = null;
@@ -515,6 +521,10 @@
     };
 
     // Weapons UI
+    function autoExpand(el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    }
     function renderWeaps(weaps){
         weapList.innerHTML = '';
         (weaps||[]).forEach(w=>{
@@ -532,9 +542,12 @@
             <input class="w-str" placeholder="S" value="${escapeAttr(w.str)}" style="width:52px" />
             <input class="w-dmg" placeholder="D" value="${escapeAttr(w.damage)}" style="width:52px" />
             <input class="w-atk" placeholder="Att" value="${escapeAttr(w.attacks)}" style="width:60px" />
-            <input class="w-rules" placeholder="Rules/Keywords" value="${escapeAttr(w.rulesKeywords)}" style="flex:1" />
+            <textarea class="w-rules" placeholder="Rules/Keywords" style="flex:1;min-height:60px">${escapeAttr(w.rulesKeywords)}</textarea>
             <button class="small rem">×</button>
         `;
+        const rulesArea = div.querySelector('.w-rules');
+        rulesArea.addEventListener('input', function() { autoExpand(this); });
+        autoExpand(rulesArea);
         div.querySelector('.rem').onclick = ()=> div.remove();
         return div;
     }
@@ -550,7 +563,7 @@
         str: n.querySelector('.w-str').value.trim(),
         damage: n.querySelector('.w-dmg').value.trim(),
         attacks: n.querySelector('.w-atk').value.trim(),
-        rulesKeywords: n.querySelector('.w-rules').value.trim()
+        rulesKeywords: n.querySelector('.w-rules').value.replaceAll('\n', ' ').trim()
     })).filter(w=>w.name || w.range); }
 
     // Rules UI
@@ -560,14 +573,18 @@
     }
     function ruleRow(r={id:uid(),title:'',desc:''}){
         const div = document.createElement('div');
-        div.style.display='flex';
-        div.style.gap='6px';
-        div.style.alignItems='center';
+        div.className='rule-row';
         div.innerHTML = `
-            <input class="r-title" placeholder="Rule title" value="${escapeAttr(r.title)}" />
-            <input class="r-desc" placeholder="Short desc" value="${escapeAttr(r.desc)}" style="flex:1" />
+            <textarea class="r-title" placeholder="Rule title" style="min-width:120px;min-height:40px">${escapeAttr(r.title)}</textarea>
+            <textarea class="r-desc" placeholder="Short desc" style="flex:1;min-height:40px">${escapeAttr(r.desc)}</textarea>
             <button class="small rem">×</button>
         `;
+        const title = div.querySelector('.r-title');
+        const desc = div.querySelector('.r-desc');
+        title.addEventListener('input', function() { autoExpand(this); });
+        desc.addEventListener('input', function() { autoExpand(this); });
+        autoExpand(title);
+        autoExpand(desc);
         div.querySelector('.rem').onclick = ()=> div.remove();
         return div;
     }
@@ -576,8 +593,8 @@
 
     function collectRules(){ return Array.from(ruleList.children).map(n=>({
         id: n.dataset.id||uid(),
-        title: n.querySelector('.r-title').value.trim(),
-        desc: n.querySelector('.r-desc').value.trim()
+        title: n.querySelector('.r-title').value.replaceAll('\n', ' ').trim(),
+        desc: n.querySelector('.r-desc').value.replaceAll('\n', ' ').trim()
     })).filter(r=>r.title); }
 
     // Edit unit helper
@@ -624,25 +641,8 @@
     function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function escapeAttr(s){ if(!s) return ''; return s.replace(/"/g,'&quot;'); }
 
-    // Load passcode from config.json
-    async function loadConfig() {
-        try {
-            const response = await fetch('./config.json?cache_bust=' + Date.now());
-            if(response.ok) {
-                const config = await response.json();
-                SYNC_PASSCODE = config.syncPasscode;
-                console.log('✓ Passcode loaded from config.json');
-            } else {
-                console.warn('Could not load config.json');
-            }
-        } catch(err) {
-            console.warn('Error loading config.json:', err);
-        }
-    }
-
     // Load on start - try Google Sheets first
     (async () => {
-        await loadConfig(); // Load passcode from external config
         const loaded = await loadFromGoogleSheets();
         if(!loaded) {
             useGoogleSheets = false;
