@@ -234,6 +234,8 @@
         if(!rows || rows.length < 2) return { factions: [] };
         
         const factionMap = new Map();
+        let currentFactionName = null;  // Track current faction for rows without explicit faction name
+        
         // Skip header row (row 0)
         for(let i = 1; i < rows.length; i++) {
             const row = rows[i];
@@ -241,18 +243,21 @@
             const factionName = cell(0);
             const unitName = cell(2);
             
-            if(!factionName) continue;
-            
-            if(!factionMap.has(factionName)) {
-                factionMap.set(factionName, {
-                    id: uid(),
-                    name: factionName,
-                    description: cell(1),
-                    units: []
-                });
+            // If this row has a faction name, update the current faction
+            if(factionName) {
+                currentFactionName = factionName;
+                if(!factionMap.has(factionName)) {
+                    factionMap.set(factionName, {
+                        id: uid(),
+                        name: factionName,
+                        description: cell(1),
+                        units: []
+                    });
+                }
             }
             
-            if(unitName) {
+            // If we have a current faction and a unit name, add the unit
+            if(currentFactionName && unitName) {
                 const weaponsText = cell(9);
                 const weapons = weaponsText.split(';').map(w => {
                     const match = w.trim().match(/(.*?)\((.*?)\)/);
@@ -278,7 +283,7 @@
                     specialRules
                 };
                 
-                factionMap.get(factionName).units.push(unit);
+                factionMap.get(currentFactionName).units.push(unit);
             }
         }
         
