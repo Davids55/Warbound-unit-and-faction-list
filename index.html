@@ -40,6 +40,19 @@
     footer{grid-column:1/-1;text-align:center;color:var(--muted);margin-top:8px;font-size:13px}
     @media (max-width:880px){.app{grid-template-columns:1fr;}.faction-list{max-height:200px}}
     #unitSearch{color: white;}
+    .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
+    .modal-overlay.active{display:flex}
+    .modal-content{background:var(--card);padding:24px;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.5);max-width:350px;border:1px solid rgba(255,255,255,0.1)}
+    .modal-title{font-size:16px;font-weight:600;margin-bottom:16px;color:var(--accent)}
+    .modal-input{width:100%;padding:8px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;background:transparent;color:inherit;font-size:14px;margin-bottom:16px}
+    .modal-input::placeholder{color:var(--muted)}
+    .modal-buttons{display:flex;gap:8px}
+    .modal-buttons button{flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-weight:500}
+    .modal-buttons .confirm{background:rgba(125,211,252,0.1);color:var(--accent);border-color:var(--accent)}
+    .modal-buttons .confirm:hover{background:rgba(125,211,252,0.2)}
+    .modal-buttons .cancel{background:transparent;color:inherit}
+    .modal-buttons .cancel:hover{background:rgba(255,255,255,0.05)}
+    .modal-error{color:#ff6b6b;font-size:12px;margin-bottom:12px;text-align:center}
 </style>
 </head>
 <body>
@@ -171,11 +184,24 @@
     <footer class="muted">Responsive, local, searchable faction & unit database</footer>
 </div>
 
+<div class="modal-overlay" id="passcodeModal">
+    <div class="modal-content">
+        <div class="modal-title">🔐 Enter Passcode</div>
+        <div class="modal-error" id="passcodeError"></div>
+        <input type="password" class="modal-input" id="passcodeInput" placeholder="Enter passcode..." autofocus />
+        <div class="modal-buttons">
+            <button class="confirm" id="passcodeConfirm">Sync</button>
+            <button class="cancel" id="passcodeCancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <script>
     // Simple localstorage-backed DB
     const LS_KEY = 'factionsDB:v1';
     const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbypXF_lyUiRGbVQYVnxJlOFyNbY2oiLh3B_-5OViyCQQ-_aZydvRVyFQMrWFNO4My0HTw/exec';
     const SHEET_ID = '11nYoIUHKz7MKpU3ziyQScj-zzgS-MEPsRNRwbONjuqI';
+    let SYNC_PASSCODE = null; // Loaded from config.json
     let db = { factions: [] };
     let selectedFactionId = null;
     let editingUnitId = null;
@@ -598,8 +624,25 @@
     function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function escapeAttr(s){ if(!s) return ''; return s.replace(/"/g,'&quot;'); }
 
+    // Load passcode from config.json
+    async function loadConfig() {
+        try {
+            const response = await fetch('./config.json?cache_bust=' + Date.now());
+            if(response.ok) {
+                const config = await response.json();
+                SYNC_PASSCODE = config.syncPasscode;
+                console.log('✓ Passcode loaded from config.json');
+            } else {
+                console.warn('Could not load config.json');
+            }
+        } catch(err) {
+            console.warn('Error loading config.json:', err);
+        }
+    }
+
     // Load on start - try Google Sheets first
     (async () => {
+        await loadConfig(); // Load passcode from external config
         const loaded = await loadFromGoogleSheets();
         if(!loaded) {
             useGoogleSheets = false;
@@ -703,9 +746,61 @@
         if(!useGoogleSheets) {
             alert('⚠️ You are currently using local storage (imported file). Use "Export" to save as JSON.');
         } else {
-            syncToGoogleSheets();
+            // Show passcode modal instead of syncing directly
+            showPasscodeModal();
         }
     };
+
+    // ===== PASSCODE MODAL FUNCTIONS =====
+    function showPasscodeModal() {
+        const modal = qs('#passcodeModal');
+        const errorMsg = qs('#passcodeError');
+        const input = qs('#passcodeInput');
+        
+        modal.classList.add('active');
+        errorMsg.textContent = '';
+        input.value = '';
+        input.focus();
+    }
+
+    function hidePasscodeModal() {
+        const modal = qs('#passcodeModal');
+        modal.classList.remove('active');
+        qs('#passcodeInput').value = '';
+        qs('#passcodeError').textContent = '';
+    }
+
+    function verifyPasscode(input) {
+        const errorMsg = qs('#passcodeError');
+        if(input === SYNC_PASSCODE) {
+            hidePasscodeModal();
+            syncToGoogleSheets();
+            return true;
+        } else {
+            errorMsg.textContent = '❌ Incorrect passcode';
+            qs('#passcodeInput').value = '';
+            qs('#passcodeInput').focus();
+            return false;
+        }
+    }
+
+    // Passcode modal handlers
+    qs('#passcodeConfirm').onclick = () => {
+        const input = qs('#passcodeInput').value;
+        verifyPasscode(input);
+    };
+
+    qs('#passcodeCancel').onclick = hidePasscodeModal;
+
+    // Allow Enter key to submit passcode
+    qs('#passcodeInput').addEventListener('keydown', (e) => {
+        if(e.key === 'Enter') {
+            qs('#passcodeConfirm').click();
+        } else if(e.key === 'Escape') {
+            hidePasscodeModal();
+        }
+    });
+    // ====================================
 
 </script>
 </body>
