@@ -242,61 +242,88 @@
     // Parse Google Sheet rows into database format
     function parseSheetRowsToDatabase(rows) {
         if(!rows || rows.length < 2) return { factions: [] };
-        
+
+        const headers = rows[0].map(h => h != null ? String(h).trim().toLowerCase() : '');
+        const findIndex = name => {
+            const idx = headers.indexOf(name.toLowerCase());
+            return idx >= 0 ? idx : null;
+        };
+
+        const factionIndex = findIndex('faction') ?? 0;
+        const descriptionIndex = findIndex('description') ?? findIndex('desc') ?? 1;
+        const skillsIndex = findIndex('skills') ?? findIndex('faction skills') ?? 2;
+        const unitNameIndex = findIndex('unit name') ?? findIndex('unit') ?? 3;
+        const pointsIndex = findIndex('points') ?? 4;
+        const maxModelsIndex = findIndex('max models') ?? findIndex('max models') ?? 5;
+        const movementIndex = findIndex('movement') ?? 6;
+        const armourIndex = findIndex('armour') ?? findIndex('armor') ?? 7;
+        const woundsIndex = findIndex('wounds') ?? 8;
+        const keywordsIndex = findIndex('keywords') ?? 9;
+        const weaponsIndex = findIndex('weapons') ?? 10;
+        const specialRulesIndex = findIndex('special rules') ?? findIndex('special rules') ?? 11;
+
         const factionMap = new Map();
-        let currentFactionName = null;  // Track current faction for rows without explicit faction name
-        
-        // Skip header row (row 0)
+        let currentFactionName = null;
+
+        const cellValue = (row, idx) => {
+            if(idx == null || idx < 0 || idx >= row.length) return '';
+            return row[idx] != null ? String(row[idx]).trim() : '';
+        };
+
         for(let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            const cell = idx => row[idx] != null ? String(row[idx]).trim() : '';
-            const factionName = cell(0);
-            const unitName = cell(2);
-            
-            // If this row has a faction name, update the current faction
+            const factionName = cellValue(row, factionIndex);
+            const description = cellValue(row, descriptionIndex);
+            const skills = cellValue(row, skillsIndex);
+            const unitName = cellValue(row, unitNameIndex);
+
             if(factionName) {
                 currentFactionName = factionName;
                 if(!factionMap.has(factionName)) {
                     factionMap.set(factionName, {
                         id: uid(),
                         name: factionName,
-                        description: cell(1),
+                        description,
+                        skills,
                         units: []
                     });
+                } else {
+                    const existing = factionMap.get(factionName);
+                    if(description) existing.description = description;
+                    if(skills) existing.skills = skills;
                 }
             }
-            
-            // If we have a current faction and a unit name, add the unit
+
             if(currentFactionName && unitName) {
-                const weaponsText = cell(9);
+                const weaponsText = cellValue(row, weaponsIndex);
                 const weapons = weaponsText.split(';').map(w => {
                     const match = w.trim().match(/(.*?)\((.*?)\)/);
                     return { id: uid(), name: match?.[1]?.trim() || w.trim(), range: match?.[2]?.trim() || '', type: '', str: '', damage: '', attacks: '', rulesKeywords: '' };
                 }).filter(w => w.name);
-                
-                const rulesText = cell(10);
+
+                const rulesText = cellValue(row, specialRulesIndex);
                 const specialRules = rulesText.split(';').map(r => {
                     const [title, desc] = r.split(':').map(x => x.trim());
                     return { id: uid(), title: title || '', desc: desc || '' };
                 }).filter(r => r.title);
-                
+
                 const unit = {
                     id: uid(),
                     name: unitName,
-                    points: Number(row[3]) || 0,
-                    maxModels: Number(row[4]) || 1,
-                    movement: cell(5),
-                    armour: cell(6),
-                    wounds: Number(row[7]) || 0,
-                    keywords: cell(8),
+                    points: Number(cellValue(row, pointsIndex)) || 0,
+                    maxModels: Number(cellValue(row, maxModelsIndex)) || 1,
+                    movement: cellValue(row, movementIndex),
+                    armour: cellValue(row, armourIndex),
+                    wounds: Number(cellValue(row, woundsIndex)) || 0,
+                    keywords: cellValue(row, keywordsIndex),
                     weapons,
                     specialRules
                 };
-                
+
                 factionMap.get(currentFactionName).units.push(unit);
             }
         }
-        
+
         return { factions: Array.from(factionMap.values()) };
     }
     
@@ -687,13 +714,13 @@
     function formatDatabaseForSheets(){
         const rows = [];
         // Header row
-        rows.push(['Faction', 'Description', 'Unit Name', 'Points', 'Max Models', 'Movement', 'Armour', 'Wounds', 'Keywords', 'Weapons', 'Special Rules']);
+        rows.push(['Faction', 'Description', 'Skills', 'Unit Name', 'Points', 'Max Models', 'Movement', 'Armour', 'Wounds', 'Keywords', 'Weapons', 'Special Rules']);
         
         // Data rows
         db.factions.forEach(f => {
             const units = f.units || [];
             if(units.length === 0){
-                rows.push([f.name, f.description||'', '', '', '', '', '', '', '', '', '']);
+                rows.push([f.name, f.description||'', f.skills||'', '', '', '', '', '', '', '', '', '']);
             } else {
                 units.forEach((u, idx) => {
                     const weaponStr = (u.weapons||[]).map(w => `${w.name}(${w.range})`).join('; ');
@@ -701,6 +728,7 @@
                     rows.push([
                         idx === 0 ? f.name : '',
                         idx === 0 ? f.description||'' : '',
+                        idx === 0 ? f.skills||'' : '',
                         u.name||'',
                         u.points||'',
                         u.maxModels||'',
