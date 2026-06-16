@@ -244,23 +244,51 @@
         if(!rows || rows.length < 2) return { factions: [] };
 
         const headers = rows[0].map(h => h != null ? String(h).trim().toLowerCase() : '');
-        const findIndex = name => {
-            const idx = headers.indexOf(name.toLowerCase());
+        const findIndex = pattern => {
+            const idx = headers.findIndex(h => h.includes(pattern.toLowerCase()));
             return idx >= 0 ? idx : null;
         };
 
-        const factionIndex = findIndex('faction') ?? 0;
-        const descriptionIndex = findIndex('description') ?? findIndex('desc') ?? 1;
-        const skillsIndex = findIndex('skills') ?? findIndex('faction skills') ?? 2;
-        const unitNameIndex = findIndex('unit name') ?? findIndex('unit') ?? 3;
-        const pointsIndex = findIndex('points') ?? 4;
-        const maxModelsIndex = findIndex('max models') ?? findIndex('max models') ?? 5;
-        const movementIndex = findIndex('movement') ?? 6;
-        const armourIndex = findIndex('armour') ?? findIndex('armor') ?? 7;
-        const woundsIndex = findIndex('wounds') ?? 8;
-        const keywordsIndex = findIndex('keywords') ?? 9;
-        const weaponsIndex = findIndex('weapons') ?? 10;
-        const specialRulesIndex = findIndex('special rules') ?? findIndex('special rules') ?? 11;
+        const factionIndex = findIndex('faction');
+        const descriptionIndex = findIndex('description') ?? findIndex('desc');
+        const skillsIndex = findIndex('skill');
+        const unitNameIndex = findIndex('unit name') ?? findIndex('unit');
+        const pointsIndex = findIndex('point');
+        const maxModelsIndex = findIndex('max model');
+        const movementIndex = findIndex('movement');
+        const armourIndex = findIndex('armour') ?? findIndex('armor');
+        const woundsIndex = findIndex('wound');
+        const keywordsIndex = findIndex('keyword');
+        const weaponsIndex = findIndex('weapon');
+        const specialRulesIndex = findIndex('special rule');
+
+        const fallback = {
+            factionIndex: factionIndex ?? 0,
+            descriptionIndex: descriptionIndex ?? 1,
+            skillsIndex: skillsIndex ?? 2,
+            unitNameIndex: unitNameIndex ?? 3,
+            pointsIndex: pointsIndex ?? 4,
+            maxModelsIndex: maxModelsIndex ?? 5,
+            movementIndex: movementIndex ?? 6,
+            armourIndex: armourIndex ?? 7,
+            woundsIndex: woundsIndex ?? 8,
+            keywordsIndex: keywordsIndex ?? 9,
+            weaponsIndex: weaponsIndex ?? 10,
+            specialRulesIndex: specialRulesIndex ?? 11,
+        };
+
+        const factionIndexFinal = fallback.factionIndex;
+        const descriptionIndexFinal = fallback.descriptionIndex;
+        const skillsIndexFinal = fallback.skillsIndex;
+        const unitNameIndexFinal = fallback.unitNameIndex;
+        const pointsIndexFinal = fallback.pointsIndex;
+        const maxModelsIndexFinal = fallback.maxModelsIndex;
+        const movementIndexFinal = fallback.movementIndex;
+        const armourIndexFinal = fallback.armourIndex;
+        const woundsIndexFinal = fallback.woundsIndex;
+        const keywordsIndexFinal = fallback.keywordsIndex;
+        const weaponsIndexFinal = fallback.weaponsIndex;
+        const specialRulesIndexFinal = fallback.specialRulesIndex;
 
         const factionMap = new Map();
         let currentFactionName = null;
@@ -272,10 +300,10 @@
 
         for(let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            const factionName = cellValue(row, factionIndex);
-            const description = cellValue(row, descriptionIndex);
-            const skills = cellValue(row, skillsIndex);
-            const unitName = cellValue(row, unitNameIndex);
+            const factionName = cellValue(row, factionIndexFinal);
+            const description = cellValue(row, descriptionIndexFinal);
+            const skills = cellValue(row, skillsIndexFinal);
+            const unitName = cellValue(row, unitNameIndexFinal);
 
             if(factionName) {
                 currentFactionName = factionName;
@@ -295,13 +323,13 @@
             }
 
             if(currentFactionName && unitName) {
-                const weaponsText = cellValue(row, weaponsIndex);
+                const weaponsText = cellValue(row, weaponsIndexFinal);
                 const weapons = weaponsText.split(';').map(w => {
                     const match = w.trim().match(/(.*?)\((.*?)\)/);
                     return { id: uid(), name: match?.[1]?.trim() || w.trim(), range: match?.[2]?.trim() || '', type: '', str: '', damage: '', attacks: '', rulesKeywords: '' };
                 }).filter(w => w.name);
 
-                const rulesText = cellValue(row, specialRulesIndex);
+                const rulesText = cellValue(row, specialRulesIndexFinal);
                 const specialRules = rulesText.split(';').map(r => {
                     const [title, desc] = r.split(':').map(x => x.trim());
                     return { id: uid(), title: title || '', desc: desc || '' };
@@ -310,12 +338,12 @@
                 const unit = {
                     id: uid(),
                     name: unitName,
-                    points: Number(cellValue(row, pointsIndex)) || 0,
-                    maxModels: Number(cellValue(row, maxModelsIndex)) || 1,
-                    movement: cellValue(row, movementIndex),
-                    armour: cellValue(row, armourIndex),
-                    wounds: Number(cellValue(row, woundsIndex)) || 0,
-                    keywords: cellValue(row, keywordsIndex),
+                    points: Number(cellValue(row, pointsIndexFinal)) || 0,
+                    maxModels: Number(cellValue(row, maxModelsIndexFinal)) || 1,
+                    movement: cellValue(row, movementIndexFinal),
+                    armour: cellValue(row, armourIndexFinal),
+                    wounds: Number(cellValue(row, woundsIndexFinal)) || 0,
+                    keywords: cellValue(row, keywordsIndexFinal),
                     weapons,
                     specialRules
                 };
