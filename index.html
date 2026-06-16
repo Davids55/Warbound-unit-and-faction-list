@@ -28,6 +28,9 @@
     .row > *{flex:1}
     .units{display:flex;flex-direction:column;gap:8px;margin-top:8px}
     .unit-card{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:10px;border-radius:8px;display:flex;flex-direction:column;gap:6px}
+    .faction-bonuses{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:10px;border-radius:8px;display:flex;flex-direction:column;gap:8px}
+    .faction-bonuses-content{white-space:pre-wrap;line-height:1.4}
+    .section-title{font-weight:700;font-size:13px;letter-spacing:0.02em}
     .unit-head{display:flex;justify-content:space-between;align-items:center}
     .tag{background:rgba(125,211,252,0.08);padding:4px 6px;border-radius:6px;font-size:12px;color:var(--accent)}
     .chips{display:flex;gap:6px;flex-wrap:wrap}
@@ -83,6 +86,8 @@
             <input id="factionName" placeholder="New faction name" required />
             <label>Description (optional)</label>
             <textarea id="factionDesc" rows="2" placeholder="Short description"></textarea>
+            <label>Faction Skills</label>
+            <textarea id="factionSkills" rows="4" placeholder="Enter faction bonuses, abilities, or notes here."></textarea>
             <div style="display:flex;gap:8px">
                 <button id="saveFaction" type="button">Save</button>
                 <button id="newFaction" type="button" class="small">New</button>
@@ -102,6 +107,11 @@
                         <div id="factionDescription" class="muted-small"></div>
                     </div>
                     <div class="muted-small">Units: <span id="unitCount">0</span></div>
+                </div>
+
+                <div class="faction-bonuses card" style="margin-top:12px">
+                    <div class="section-title">Faction Skills</div>
+                    <div id="factionSkillsDisplay" class="faction-bonuses-content muted-small">No faction skills defined.</div>
                 </div>
 
                 <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
@@ -343,9 +353,9 @@
     }
 
     // Elements
-    const factionList = qs('#factionList'), factionName = qs('#factionName'), factionDesc = qs('#factionDesc'),
+    const factionList = qs('#factionList'), factionName = qs('#factionName'), factionDesc = qs('#factionDesc'), factionSkills = qs('#factionSkills'),
                 saveFactionBtn = qs('#saveFaction'), newFactionBtn = qs('#newFaction'), deleteFactionBtn = qs('#deleteFaction'),
-                factionTitle = qs('#factionTitle'), factionDescription = qs('#factionDescription'), factionDetail = qs('#factionDetail'),
+                factionTitle = qs('#factionTitle'), factionDescription = qs('#factionDescription'), factionDetailsDisplay = qs('#factionSkillsDisplay'), factionDetail = qs('#factionDetail'),
                 noSelection = qs('#noSelection'), unitCount = qs('#unitCount'), unitsList = qs('#unitsList'),
                 openUnitFormBtn = qs('#openUnitForm'), unitFormWrap = qs('#unitFormWrap'), cancelUnitBtn = qs('#cancelUnit'),
                 saveUnitBtn = qs('#saveUnit'), unitForm = qs('#unitForm'), unitName = qs('#unitName'), unitPoints = qs('#unitPoints'),
@@ -388,8 +398,11 @@
         factionDetail.style.display='block';
         factionTitle.textContent = f.name;
         factionDescription.textContent = f.description || '';
+        factionDetailsDisplay.textContent = f.skills ? f.skills : 'No faction skills defined.';
+        factionDetailsDisplay.classList.toggle('muted-small', !f.skills);
         factionName.value = f.name;
         factionDesc.value = f.description || '';
+        factionSkills.value = f.skills || '';
         renderFactions(globalSearch.value);
         renderUnits();
     }
@@ -454,9 +467,9 @@
         if(!name) return alert('Faction name required');
         if(selectedFactionId){
             const f = db.factions.find(x=>x.id===selectedFactionId);
-            if(f){ f.name = name; f.description = factionDesc.value.trim(); }
+            if(f){ f.name = name; f.description = factionDesc.value.trim(); f.skills = factionSkills.value.trim(); }
         }else{
-            const f = { id: uid(), name, description: factionDesc.value.trim(), units: [] };
+            const f = { id: uid(), name, description: factionDesc.value.trim(), skills: factionSkills.value.trim(), units: [] };
             db.factions.push(f);
             selectedFactionId = f.id;
         }
@@ -465,10 +478,10 @@
 
     newFactionBtn.onclick = ()=>{
         selectedFactionId = null;
-        factionName.value = ''; factionDesc.value = '';
+        factionName.value = ''; factionDesc.value = ''; factionSkills.value = '';
         noSelection.style.display='none'; factionDetail.style.display='none';
         // create quickly
-        const f = { id: uid(), name: 'New Faction', description: '', units: [] };
+        const f = { id: uid(), name: 'New Faction', description: '', skills: '', units: [] };
         db.factions.push(f); saveDB(); renderFactions(globalSearch.value); selectFaction(f.id);
     };
 
