@@ -324,36 +324,55 @@
 
             if(currentFactionName && unitName) {
                 const weaponsText = cellValue(row, weaponsIndexFinal);
-                const weapons = weaponsText.split(';').map(w => {
-                    const weaponText = w.trim();
-                    if(!weaponText) return null;
+                let weapons = [];
+                if(weaponsText) {
+                    try {
+                        const parsedWeapons = JSON.parse(weaponsText);
+                        if(Array.isArray(parsedWeapons)) {
+                            weapons = parsedWeapons.map(w => ({
+                                id: w.id || uid(),
+                                name: w.name || '',
+                                range: w.range || '',
+                                type: w.type || '',
+                                str: w.str || '',
+                                damage: w.damage || '',
+                                attacks: w.attacks || '',
+                                rulesKeywords: w.rulesKeywords || ''
+                            })).filter(w => w.name);
+                        }
+                    } catch (jsonError) {
+                        weapons = weaponsText.split(';').map(w => {
+                            const weaponText = w.trim();
+                            if(!weaponText) return null;
 
-                    const parts = weaponText.split('|').map(part => part.trim());
-                    if(parts.length >= 7) {
-                        return {
-                            id: uid(),
-                            name: parts[0] || '',
-                            range: parts[1] || '',
-                            type: parts[2] || '',
-                            str: parts[3] || '',
-                            damage: parts[4] || '',
-                            attacks: parts[5] || '',
-                            rulesKeywords: parts.slice(6).join('|') || ''
-                        };
+                            const parts = weaponText.split('|').map(part => part.trim());
+                            if(parts.length >= 7) {
+                                return {
+                                    id: uid(),
+                                    name: parts[0] || '',
+                                    range: parts[1] || '',
+                                    type: parts[2] || '',
+                                    str: parts[3] || '',
+                                    damage: parts[4] || '',
+                                    attacks: parts[5] || '',
+                                    rulesKeywords: parts.slice(6).join('|') || ''
+                                };
+                            }
+
+                            const match = weaponText.match(/(.*?)\((.*?)\)/);
+                            return {
+                                id: uid(),
+                                name: match?.[1]?.trim() || weaponText,
+                                range: match?.[2]?.trim() || '',
+                                type: '',
+                                str: '',
+                                damage: '',
+                                attacks: '',
+                                rulesKeywords: ''
+                            };
+                        }).filter(w => w && w.name);
                     }
-
-                    const match = weaponText.match(/(.*?)\((.*?)\)/);
-                    return {
-                        id: uid(),
-                        name: match?.[1]?.trim() || weaponText,
-                        range: match?.[2]?.trim() || '',
-                        type: '',
-                        str: '',
-                        damage: '',
-                        attacks: '',
-                        rulesKeywords: ''
-                    };
-                }).filter(w => w && w.name);
+                }
 
                 const rulesText = cellValue(row, specialRulesIndexFinal);
                 const specialRules = rulesText.split(';').map(r => {
@@ -777,15 +796,7 @@
                 rows.push([f.name, f.description||'', f.skills||'', '', '', '', '', '', '', '', '', '']);
             } else {
                 units.forEach((u, idx) => {
-                    const weaponStr = (u.weapons||[]).map(w => [
-                        w.name || '',
-                        w.range || '',
-                        w.type || '',
-                        w.str || '',
-                        w.damage || '',
-                        w.attacks || '',
-                        w.rulesKeywords || ''
-                    ].join('|')).join('; ');
+                    const weaponStr = JSON.stringify(u.weapons || []);
                     const rulesStr = (u.specialRules||[]).map(r => `${r.title}: ${r.desc}`).join('; ');
                     rows.push([
                         idx === 0 ? f.name : '',
@@ -909,6 +920,7 @@
         }
     });
     // ====================================
+
 
 </script>
 </body>
