@@ -6,7 +6,7 @@ Features
 - sync to google sheets for storage
 - Gui for easy unit and faction edits
 
-Too add
+To add
 
 - list builder on right hand of screen
 - mobile device version
