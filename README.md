@@ -7,7 +7,7 @@ Features
 - Gui for easy unit and faction edits
 
 To add
-- make the unit editor open under the units current pace instead of at bottom of list
+- make the unit editor open under the units current place instead of at bottom of list
 - list builder on right hand of screen
 - mobile device version
 
