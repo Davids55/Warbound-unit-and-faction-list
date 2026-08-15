@@ -476,6 +476,18 @@
                 ruleList = qs('#ruleList'), addRuleBtn = qs('#addRule'), clearWeapsBtn = qs('#clearWeaps'), clearRulesBtn = qs('#clearRules'),
                 unitSearch = qs('#unitSearch'), globalSearch = qs('#globalSearch'), exportBtn = qs('#exportBtn'), importBtn = qs('#importBtn');
 
+// Remember original location of the unit form so we can restore it after inline editing
+let unitFormOriginalParent = unitFormWrap.parentElement;
+let unitFormOriginalNextSibling = unitFormWrap.nextSibling;
+function restoreUnitFormPosition(){
+    if(!unitFormOriginalParent) return;
+    if(unitFormOriginalNextSibling && unitFormOriginalNextSibling.parentElement === unitFormOriginalParent){
+        unitFormOriginalParent.insertBefore(unitFormWrap, unitFormOriginalNextSibling);
+    } else {
+        unitFormOriginalParent.appendChild(unitFormWrap);
+    }
+}
+
     // Render factions
     function renderFactions(filter=''){
         factionList.innerHTML = '';
@@ -533,6 +545,7 @@
         if(units.length===0){ unitsList.innerHTML='<div class="empty">No units</div>'; return; }
         units.forEach(u=>{
             const div = document.createElement('div');
+            div.dataset.id = u.id || '';
             div.className='unit-card';
             div.innerHTML = `
                 <div class="unit-head">
@@ -613,8 +626,17 @@
         const f = db.factions.find(x=>x.id===selectedFactionId);
         if(!f) return alert('Select a faction first');
         editingUnitId = unitId;
+        // Insert the unit form directly after the unit being edited for convenience
         unitFormWrap.style.display='block';
         if(unitId){
+            const unitEl = unitsList.querySelector(`[data-id="${unitId}"]`);
+            if(unitEl){
+                unitEl.insertAdjacentElement('afterend', unitFormWrap);
+                unitEl.scrollIntoView({behavior:'smooth', block:'nearest'});
+            } else {
+                // fallback: restore to original place
+                restoreUnitFormPosition();
+            }
             const u = f.units.find(x=>x.id===unitId);
             if(u){
                 unitName.value = u.name; unitPoints.value = u.points||0; unitMax.value = u.maxModels||1;
@@ -624,13 +646,18 @@
                 renderWeaps(u.weapons||[]); renderRules(u.specialRules||[]);
             }
         }else{
+            // Adding a new unit: place form at end of the list for context
+            const last = unitsList.lastElementChild;
+            if(last) last.insertAdjacentElement('afterend', unitFormWrap);
+            else unitsList.appendChild(unitFormWrap);
             unitForm.reset();
             unitDescription.value='';
             unitKeywords.value=''; renderWeaps([]); renderRules([]);
         }
+        unitFormWrap.scrollIntoView({behavior:'smooth', block:'nearest'});
     }
 
-    cancelUnitBtn.onclick = ()=> { unitFormWrap.style.display='none'; editingUnitId = null; };
+    cancelUnitBtn.onclick = ()=> { restoreUnitFormPosition(); unitFormWrap.style.display='none'; editingUnitId = null; };
 
     saveUnitBtn.onclick = ()=>{
         const f = db.factions.find(x=>x.id===selectedFactionId);
@@ -653,7 +680,7 @@
         }else{
             f.units = f.units || []; f.units.push(payload);
         }
-        saveDB(); unitFormWrap.style.display='none'; editingUnitId = null; renderUnits(unitSearch.value); renderFactions(globalSearch.value);
+        saveDB(); restoreUnitFormPosition(); unitFormWrap.style.display='none'; editingUnitId = null; renderUnits(unitSearch.value); renderFactions(globalSearch.value);
     };
 
     // Weapons UI
