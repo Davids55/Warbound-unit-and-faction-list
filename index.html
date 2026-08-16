@@ -517,10 +517,17 @@
             div.innerHTML = `<div style="flex:1"><div style="font-weight:600">${escapeHtml(e.unitSnapshot.name)}</div><div class="muted-small">${escapeHtml(e.unitSnapshot.description || '')}</div><div class="muted-small">Keywords: ${escapeHtml(e.unitSnapshot.keywords||'')}</div></div>
                 <div class="count"><button class="remove-btn small">×</button><button class="small dec">−</button><input type="number" min="1" max="${e.unitSnapshot.maxModels}" value="${e.models}" /><button class="small inc">＋</button></div>
                 <div style="width:110px;text-align:right;font-weight:700">${(e.unitSnapshot.points||0) * e.models} pts</div>`;
-            div.querySelector('.remove-btn').onclick = ()=>{ listState.entries.splice(idx,1); updateListUI(); };
-            div.querySelector('.inc').onclick = ()=>{ if(e.models < e.unitSnapshot.maxModels){ e.models++; updateListUI(); } };
-            div.querySelector('.dec').onclick = ()=>{ if(e.models > 1){ e.models--; updateListUI(); } else { listState.entries.splice(idx,1); updateListUI(); } };
-            const input = div.querySelector('input'); input.onchange = ()=>{ let v = Number(input.value)||1; v = Math.max(1, Math.min(e.unitSnapshot.maxModels, v)); e.models = v; updateListUI(); };
+            const removeBtn = div.querySelector('.remove-btn');
+            const incBtn = div.querySelector('.inc');
+            const decBtn = div.querySelector('.dec');
+            const input = div.querySelector('input');
+            // ensure numeric input attributes
+            input.step = 1; input.min = 1; input.max = e.unitSnapshot.maxModels;
+            removeBtn.onclick = ()=>{ listState.entries.splice(idx,1); updateListUI(); };
+            incBtn.onclick = ()=>{ let v = Number(input.value)||0; v = Math.min(e.unitSnapshot.maxModels, v + 1); input.value = v; e.models = v; updateListUI(); };
+            decBtn.onclick = ()=>{ let v = Number(input.value)||0; if(v > 1){ v = Math.max(1, v - 1); input.value = v; e.models = v; updateListUI(); } else { listState.entries.splice(idx,1); updateListUI(); } };
+            // respond to native spinner/typing immediately
+            input.addEventListener('input', ()=>{ let v = Number(input.value) || 1; v = Math.max(1, Math.min(e.unitSnapshot.maxModels, v)); e.models = v; updateListUI(); });
             listEntriesEl.appendChild(div);
         });
 
