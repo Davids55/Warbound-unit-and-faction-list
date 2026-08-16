@@ -466,23 +466,31 @@
         const unitFactionId = f.id;
         const existingFactions = new Set(listState.entries.map(e=>e.factionId));
         if(!existingFactions.has(unitFactionId) && existingFactions.size>=2) return alert('Cannot add units from a third faction');
-        const existing = listState.entries.find(e=>e.unitId===unitId);
-        const max = unitMaxAllowed(u);
-        if(existing){
-            if(existing.count < max){ existing.count++; }
-            else return alert('Reached max models for this unit');
-        } else {
-            listState.entries.push({ unitId, factionId: unitFactionId, count: 1, unitSnapshot: { name: u.name, points: u.points||0, max } });
-        }
+        const copiesAllowed = (u.keywords||'').toLowerCase().includes('epic') ? 1 : 3;
+        const existingCopies = listState.entries.filter(e=>e.unitId===unitId).length;
+        if(existingCopies >= copiesAllowed) return alert(`Cannot add more than ${copiesAllowed} of this unit`);
+        // create a new entry instance with 1 model (user can edit models up to unit.maxModels)
+        const snapshot = {
+            name: u.name,
+            points: u.points||0,
+            maxModels: Number(u.maxModels) || 1,
+            movement: u.movement||'',
+            armour: u.armour||'',
+            wounds: u.wounds||0,
+            description: u.description||'',
+            keywords: u.keywords||'',
+            weapons: u.weapons||[],
+            specialRules: u.specialRules||[]
+        };
+        listState.entries.push({ unitId, factionId: unitFactionId, models: 1, unitSnapshot: snapshot });
         updateListUI();
     }
 
     function removeUnitFromList(unitId){
-        const existing = listState.entries.find(e=>e.unitId===unitId);
-        if(!existing) return;
-        existing.count--;
-        if(existing.count<=0) listState.entries = listState.entries.filter(e=>e.unitId!==unitId);
-        updateListUI();
+        // remove the most recently added entry for this unit
+        for(let i = listState.entries.length - 1; i >= 0; i--){
+            if(listState.entries[i].unitId === unitId){ listState.entries.splice(i,1); updateListUI(); return; }
+        }
     }
 
     function updateListUI(){
@@ -502,27 +510,27 @@
 
         // render entries
         listEntriesEl.innerHTML = '';
-        listState.entries.forEach(e=>{
+        listState.entries.forEach((e, idx)=>{
             const div = document.createElement('div'); div.className='list-entry';
-            div.innerHTML = `<div style="flex:1"><div style="font-weight:600">${escapeHtml(e.unitSnapshot.name)}</div><div class="muted-small">${escapeHtml(e.unitSnapshot.points+' pts each')}</div></div>
-                <div class="count"><button class="small dec">−</button><input type="number" min="1" max="${e.unitSnapshot.max}" value="${e.count}" style="width:48px;text-align:center" /><button class="small inc">＋</button></div>
-                <div style="width:72px;text-align:right;font-weight:700">${e.unitSnapshot.points * e.count} pts</div>`;
-            div.querySelector('.inc').onclick = ()=>{ if(e.count < e.unitSnapshot.max){ e.count++; updateListUI(); } };
-            div.querySelector('.dec').onclick = ()=>{ e.count--; if(e.count<=0) listState.entries = listState.entries.filter(x=>x.unitId!==e.unitId); updateListUI(); };
-            const input = div.querySelector('input'); input.onchange = ()=>{ let v = Number(input.value)||1; v = Math.max(1, Math.min(e.unitSnapshot.max, v)); e.count = v; updateListUI(); };
+            div.innerHTML = `<div style="flex:1"><div style="font-weight:600">${escapeHtml(e.unitSnapshot.name)}</div><div class="muted-small">${escapeHtml(e.unitSnapshot.description || '')}</div><div class="muted-small">Keywords: ${escapeHtml(e.unitSnapshot.keywords||'')}</div></div>
+                <div class="count"><button class="small dec">Remove</button><input type="number" min="1" max="${e.unitSnapshot.maxModels}" value="${e.models}" style="width:72px;text-align:center" /></div>
+                <div style="width:110px;text-align:right;font-weight:700">${(e.unitSnapshot.points||0) * e.models} pts</div>`;
+            div.querySelector('.dec').onclick = ()=>{ listState.entries.splice(idx,1); updateListUI(); };
+            const input = div.querySelector('input'); input.onchange = ()=>{ let v = Number(input.value)||1; v = Math.max(1, Math.min(e.unitSnapshot.maxModels, v)); e.models = v; updateListUI(); };
             listEntriesEl.appendChild(div);
         });
 
         // update total
-        const total = listState.entries.reduce((s,e)=>s + (e.unitSnapshot.points||0) * e.count, 0);
+        const total = listState.entries.reduce((s,e)=>s + (e.unitSnapshot.points||0) * e.models, 0);
         listTotalEl.textContent = total;
     }
 
     function splitFactionSkills(f){
         if(!f) return {l1:'',l2:''};
         const txt = f.skills || '';
-        const m1 = txt.match(/level\s*1[:\-]?\s*([^\n\r]+)/i);
-        const m2 = txt.match(/level\s*2[:\-]?\s*([^\n\r]+)/i);
+        // capture multiline Level 1 and Level 2 sections if labelled
+        const m1 = txt.match(/level\s*1[:\-]?\s*([\s\S]*?)(?=level\s*2[:\-]?|$)/i);
+        const m2 = txt.match(/level\s*2[:\-]?\s*([\s\S]*?)(?=$)/i);
         if(m1 || m2) return { l1: m1 ? m1[1].trim() : '', l2: m2 ? m2[1].trim() : '' };
         const parts = txt.split(/\n\s*\n/);
         if(parts.length>=2) return { l1: parts[0].trim(), l2: parts.slice(1).join('\n\n').trim() };
@@ -535,9 +543,22 @@
         const factions = Array.from(new Set(listState.entries.map(e=>e.factionId))).map(fid=>db.factions.find(f=>f.id===fid)).filter(Boolean);
         lines.push('List Builder Export');
         lines.push('Factions: ' + factions.map(f=>f.name).join(', '));
-        lines.push('Total Points: ' + (listState.entries.reduce((s,e)=>s + (e.unitSnapshot.points||0)*e.count,0)));
+        lines.push('Total Points: ' + (listState.entries.reduce((s,e)=>s + (e.unitSnapshot.points||0)*e.models,0)));
         lines.push('');
-        listState.entries.forEach(e=> lines.push(`${e.unitSnapshot.name} — ${e.count} model(s) × ${e.unitSnapshot.points} pts = ${e.count * e.unitSnapshot.points} pts`));
+        listState.entries.forEach(e=>{
+            lines.push('----');
+            lines.push(`Name: ${e.unitSnapshot.name}`);
+            lines.push(`Models: ${e.models} (Max per unit: ${e.unitSnapshot.maxModels})`);
+            lines.push(`Points per model: ${e.unitSnapshot.points}`);
+            lines.push(`Total points: ${e.models * e.unitSnapshot.points}`);
+            if(e.unitSnapshot.description) lines.push(`Description: ${e.unitSnapshot.description}`);
+            if(e.unitSnapshot.keywords) lines.push(`Keywords: ${e.unitSnapshot.keywords}`);
+            if(e.unitSnapshot.movement) lines.push(`Movement: ${e.unitSnapshot.movement}`);
+            if(e.unitSnapshot.armour) lines.push(`Armour: ${e.unitSnapshot.armour}`);
+            if(e.unitSnapshot.wounds) lines.push(`Wounds: ${e.unitSnapshot.wounds}`);
+            if(e.unitSnapshot.weapons && e.unitSnapshot.weapons.length){ lines.push('Weapons:'); e.unitSnapshot.weapons.forEach(w=> lines.push(` - ${w.name} ${w.range||''} ${w.type||''} S${w.str||''} D${w.damage||''} Att:${w.attacks||''} ${w.rulesKeywords||''}`)); }
+            if(e.unitSnapshot.specialRules && e.unitSnapshot.specialRules.length){ lines.push('Special Rules:'); e.unitSnapshot.specialRules.forEach(r=> lines.push(` - ${r.title}: ${r.desc}`)); }
+        });
         const blob = new Blob([lines.join('\n')], {type:'text/plain'});
         const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'list.txt'; a.click(); URL.revokeObjectURL(url);
     };
