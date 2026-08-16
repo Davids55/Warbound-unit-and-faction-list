@@ -8,7 +8,7 @@
     :root{--bg:#0f1724;--card:#0b1220;--muted:#9aa4b2;--accent:#7dd3fc;--glass:rgba(255,255,255,0.03)}
     *{box-sizing:border-box}
     body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;color:#e6eef6;background:linear-gradient(180deg,#061022 0%,#081328 100%);padding:16px}
-    .app{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:320px 1fr;gap:16px}
+    .app{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:320px 1fr 360px;gap:16px}
     header{grid-column:1/-1;display:flex;align-items:center;gap:12px}
     h1{font-size:18px;margin:0;color:var(--accent)}
     .search{flex:1}
@@ -27,6 +27,13 @@
     .row{display:flex;gap:8px}
     .row > *{flex:1}
     .units{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+    /* List builder (right column) */
+    .list-builder{display:flex;flex-direction:column;gap:8px}
+    .list-header{display:flex;justify-content:space-between;align-items:center}
+    .list-entries{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto;padding:8px}
+    .list-entry{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,0.02);border-radius:8px}
+    .list-entry .count{width:72px;display:flex;align-items:center;gap:6px}
+    .list-factions{display:flex;gap:8px;flex-wrap:wrap}
     .unit-card{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:10px;border-radius:8px;display:flex;flex-direction:column;gap:6px}
     .unit-name-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
     .unit-desc{max-width:48%;text-align:right;line-height:1.35;word-break:break-word}
@@ -88,8 +95,10 @@
             <input id="factionName" placeholder="New faction name" required />
             <label>Description (optional)</label>
             <textarea id="factionDesc" rows="2" placeholder="Short description"></textarea>
-            <label>Faction Skills</label>
-            <textarea id="factionSkills" rows="4" placeholder="Enter faction bonuses, abilities, or notes here."></textarea>
+            <label>Faction Skills - Level 1</label>
+                <textarea id="factionSkillsL1" rows="3" placeholder="Level 1 skill text (short)"></textarea>
+            <label>Faction Skills - Level 2</label>
+                <textarea id="factionSkillsL2" rows="3" placeholder="Level 2 skill text (short)"></textarea>
             <div style="display:flex;gap:8px">
                 <button id="saveFaction" type="button">Save</button>
                 <button id="newFaction" type="button" class="small">New</button>
@@ -198,6 +207,37 @@
 
         </div>
     </main>
+
+    <aside class="card list-builder" id="listBuilder">
+        <div class="list-header">
+            <div>
+                <div style="font-weight:700">List Builder</div>
+                <div class="muted-small">Units added will appear here</div>
+            </div>
+            <div style="text-align:right">
+                <div style="font-weight:700">Total: <span id="listTotal">0</span> pts</div>
+                <div style="margin-top:6px">
+                    <button id="downloadList" class="small">Download</button>
+                    <button id="clearList" class="small">Clear</button>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top:8px">
+            <div class="section-title">Factions In List</div>
+            <div id="listFactions" class="list-factions muted-small" style="margin-top:6px"></div>
+        </div>
+
+        <div style="margin-top:8px">
+            <div class="section-title">Faction Skills</div>
+            <div id="listSkills" class="faction-bonuses-content muted-small" style="margin-top:6px">No skills</div>
+        </div>
+
+        <div style="margin-top:8px;flex:1;display:flex;flex-direction:column">
+            <div class="section-title">List Units</div>
+            <div id="listEntries" class="list-entries"></div>
+        </div>
+    </aside>
 
     <footer class="muted">Responsive, local, searchable faction & unit database</footer>
 </div>
@@ -411,6 +451,98 @@
 
         return { factions: Array.from(factionMap.values()) };
     }
+
+    // List builder functions
+    function unitMaxAllowed(u){
+        const isEpic = (u.keywords||'').toLowerCase().includes('epic');
+        return isEpic ? 1 : Math.min(u.maxModels||1, 3);
+    }
+
+    function addUnitToList(unitId){
+        const f = db.factions.find(x=>x.id===selectedFactionId);
+        if(!f) return alert('Select a faction first');
+        const u = f.units.find(x=>x.id===unitId);
+        if(!u) return;
+        const unitFactionId = f.id;
+        const existingFactions = new Set(listState.entries.map(e=>e.factionId));
+        if(!existingFactions.has(unitFactionId) && existingFactions.size>=2) return alert('Cannot add units from a third faction');
+        const existing = listState.entries.find(e=>e.unitId===unitId);
+        const max = unitMaxAllowed(u);
+        if(existing){
+            if(existing.count < max){ existing.count++; }
+            else return alert('Reached max models for this unit');
+        } else {
+            listState.entries.push({ unitId, factionId: unitFactionId, count: 1, unitSnapshot: { name: u.name, points: u.points||0, max } });
+        }
+        updateListUI();
+    }
+
+    function removeUnitFromList(unitId){
+        const existing = listState.entries.find(e=>e.unitId===unitId);
+        if(!existing) return;
+        existing.count--;
+        if(existing.count<=0) listState.entries = listState.entries.filter(e=>e.unitId!==unitId);
+        updateListUI();
+    }
+
+    function updateListUI(){
+        // update factions
+        const factions = Array.from(new Set(listState.entries.map(e=>e.factionId)));
+        listFactionsEl.innerHTML = '';
+        factions.forEach(fid=>{
+            const fac = db.factions.find(x=>x.id===fid);
+            if(fac){ const el = document.createElement('div'); el.className='chip'; el.textContent = fac.name; listFactionsEl.appendChild(el); }
+        });
+
+        // update skills display
+        if(factions.length===0){ listSkillsEl.textContent='No skills'; }
+        else if(factions.length===1){ const fac = db.factions.find(x=>x.id===factions[0]); const s = splitFactionSkills(fac); listSkillsEl.innerHTML = `<b>Level 1:</b> ${escapeHtml(s.l1||'')}<br/><b>Level 2:</b> ${escapeHtml(s.l2||'')}`; }
+        else { // 2 factions -> show Level 1 from each
+            const parts = factions.map(fid=>{ const fac=db.factions.find(x=>x.id===fid); const s=splitFactionSkills(fac); return `<div><b>${escapeHtml(fac.name)} L1:</b> ${escapeHtml(s.l1||'')}</div>`; }); listSkillsEl.innerHTML = parts.join(''); }
+
+        // render entries
+        listEntriesEl.innerHTML = '';
+        listState.entries.forEach(e=>{
+            const div = document.createElement('div'); div.className='list-entry';
+            div.innerHTML = `<div style="flex:1"><div style="font-weight:600">${escapeHtml(e.unitSnapshot.name)}</div><div class="muted-small">${escapeHtml(e.unitSnapshot.points+' pts each')}</div></div>
+                <div class="count"><button class="small dec">−</button><input type="number" min="1" max="${e.unitSnapshot.max}" value="${e.count}" style="width:48px;text-align:center" /><button class="small inc">＋</button></div>
+                <div style="width:72px;text-align:right;font-weight:700">${e.unitSnapshot.points * e.count} pts</div>`;
+            div.querySelector('.inc').onclick = ()=>{ if(e.count < e.unitSnapshot.max){ e.count++; updateListUI(); } };
+            div.querySelector('.dec').onclick = ()=>{ e.count--; if(e.count<=0) listState.entries = listState.entries.filter(x=>x.unitId!==e.unitId); updateListUI(); };
+            const input = div.querySelector('input'); input.onchange = ()=>{ let v = Number(input.value)||1; v = Math.max(1, Math.min(e.unitSnapshot.max, v)); e.count = v; updateListUI(); };
+            listEntriesEl.appendChild(div);
+        });
+
+        // update total
+        const total = listState.entries.reduce((s,e)=>s + (e.unitSnapshot.points||0) * e.count, 0);
+        listTotalEl.textContent = total;
+    }
+
+    function splitFactionSkills(f){
+        if(!f) return {l1:'',l2:''};
+        const txt = f.skills || '';
+        const m1 = txt.match(/level\s*1[:\-]?\s*([^\n\r]+)/i);
+        const m2 = txt.match(/level\s*2[:\-]?\s*([^\n\r]+)/i);
+        if(m1 || m2) return { l1: m1 ? m1[1].trim() : '', l2: m2 ? m2[1].trim() : '' };
+        const parts = txt.split(/\n\s*\n/);
+        if(parts.length>=2) return { l1: parts[0].trim(), l2: parts.slice(1).join('\n\n').trim() };
+        const lines = txt.split(/\n/);
+        return { l1: (lines[0]||'').trim(), l2: lines.slice(1).join(' ').trim() };
+    }
+
+    qs('#downloadList').onclick = ()=>{
+        const lines = [];
+        const factions = Array.from(new Set(listState.entries.map(e=>e.factionId))).map(fid=>db.factions.find(f=>f.id===fid)).filter(Boolean);
+        lines.push('List Builder Export');
+        lines.push('Factions: ' + factions.map(f=>f.name).join(', '));
+        lines.push('Total Points: ' + (listState.entries.reduce((s,e)=>s + (e.unitSnapshot.points||0)*e.count,0)));
+        lines.push('');
+        listState.entries.forEach(e=> lines.push(`${e.unitSnapshot.name} — ${e.count} model(s) × ${e.unitSnapshot.points} pts = ${e.count * e.unitSnapshot.points} pts`));
+        const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'list.txt'; a.click(); URL.revokeObjectURL(url);
+    };
+
+    qs('#clearList').onclick = ()=>{ listState.entries = []; updateListUI(); };
     
     // Load from Google Sheets
     async function loadFromGoogleSheets() {
@@ -465,7 +597,7 @@
     }
 
     // Elements
-    const factionList = qs('#factionList'), factionName = qs('#factionName'), factionDesc = qs('#factionDesc'), factionSkills = qs('#factionSkills'),
+    const factionList = qs('#factionList'), factionName = qs('#factionName'), factionDesc = qs('#factionDesc'), factionSkillsL1 = qs('#factionSkillsL1'), factionSkillsL2 = qs('#factionSkillsL2'),
                 saveFactionBtn = qs('#saveFaction'), newFactionBtn = qs('#newFaction'), deleteFactionBtn = qs('#deleteFaction'),
                 factionTitle = qs('#factionTitle'), factionDescription = qs('#factionDescription'), factionDetailsDisplay = qs('#factionSkillsDisplay'), factionDetail = qs('#factionDetail'),
                 noSelection = qs('#noSelection'), unitCount = qs('#unitCount'), unitsList = qs('#unitsList'),
@@ -487,6 +619,10 @@ function restoreUnitFormPosition(){
         unitFormOriginalParent.appendChild(unitFormWrap);
     }
 }
+
+// List builder elements and state
+const listEntriesEl = qs('#listEntries'), listTotalEl = qs('#listTotal'), listFactionsEl = qs('#listFactions'), listSkillsEl = qs('#listSkills');
+let listState = { entries: [] }; // entries: {unitId,factionId,count,unitSnapshot}
 
     // Render factions
     function renderFactions(filter=''){
@@ -522,11 +658,15 @@ function restoreUnitFormPosition(){
         factionDetail.style.display='block';
         factionTitle.textContent = f.name;
         factionDescription.textContent = f.description || '';
-        factionDetailsDisplay.textContent = f.skills ? f.skills : 'No faction skills defined.';
+        const split = splitFactionSkills(f);
+        if(f.skills){ factionDetailsDisplay.innerHTML = `<b>Level 1:</b> ${escapeHtml(split.l1||'')}<br/><b>Level 2:</b> ${escapeHtml(split.l2||'')}`; }
+        else { factionDetailsDisplay.textContent = 'No faction skills defined.'; }
         factionDetailsDisplay.classList.toggle('muted-small', !f.skills);
         factionName.value = f.name;
         factionDesc.value = f.description || '';
-        factionSkills.value = f.skills || '';
+        const s = splitFactionSkills(f);
+        factionSkillsL1.value = s.l1 || '';
+        factionSkillsL2.value = s.l2 || '';
         renderFactions(globalSearch.value);
         renderUnits();
     }
@@ -557,8 +697,10 @@ function restoreUnitFormPosition(){
                         <div class="muted-small">${escapeHtml(u.keywords||'')}</div>
                     </div>
                     <div class="controls">
+                        <button class="small add-u">＋</button>
+                        <button class="small rem-u">−</button>
                         <button class="small edit-u">Edit</button>
-                        <button class="small">Delete</button>
+                        <button class="small del-u">Delete</button>
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -576,9 +718,12 @@ function restoreUnitFormPosition(){
                     <div style="margin-top:6px" class="muted-small">${(u.specialRules||[]).map(r=>`<div><b>${escapeHtml(r.title)}</b>: ${escapeHtml(r.desc)}</div>`).join('') || '<div class="muted-small">None</div>'}</div>
                 </div>
             `;
+            div.querySelector('.add-u').onclick = ()=> addUnitToList(u.id);
+            div.querySelector('.rem-u').onclick = ()=> removeUnitFromList(u.id);
             div.querySelector('.edit-u').onclick = ()=> openUnitEditor(u.id);
-            div.querySelectorAll('.controls button')[1].onclick = ()=> {
-                if(confirm('Delete unit?')){ f.units = (f.units||[]).filter(x=>x.id!==u.id); saveDB(); renderUnits(unitSearch.value); renderFactions(globalSearch.value); }
+            div.querySelector('.del-u').onclick = ()=> {
+                if(confirm('Delete unit?')){ f.units = (f.units||[]).filter(x=>x.id!==u.id); saveDB(); // remove from list if present
+                    listState.entries = listState.entries.filter(e=>e.unitId!==u.id); updateListUI(); renderUnits(unitSearch.value); renderFactions(globalSearch.value); }
             };
             unitsList.appendChild(div);
         });
@@ -593,11 +738,12 @@ function restoreUnitFormPosition(){
     saveFactionBtn.onclick = ()=>{
         const name = factionName.value.trim();
         if(!name) return alert('Faction name required');
+        const skillsCombined = `Level 1: ${factionSkillsL1.value.trim()}\n\nLevel 2: ${factionSkillsL2.value.trim()}`.trim();
         if(selectedFactionId){
             const f = db.factions.find(x=>x.id===selectedFactionId);
-            if(f){ f.name = name; f.description = factionDesc.value.trim(); f.skills = factionSkills.value.trim(); }
+            if(f){ f.name = name; f.description = factionDesc.value.trim(); f.skills = skillsCombined; }
         }else{
-            const f = { id: uid(), name, description: factionDesc.value.trim(), skills: factionSkills.value.trim(), units: [] };
+            const f = { id: uid(), name, description: factionDesc.value.trim(), skills: skillsCombined, units: [] };
             db.factions.push(f);
             selectedFactionId = f.id;
         }
@@ -606,7 +752,7 @@ function restoreUnitFormPosition(){
 
     newFactionBtn.onclick = ()=>{
         selectedFactionId = null;
-        factionName.value = ''; factionDesc.value = ''; factionSkills.value = '';
+        factionName.value = ''; factionDesc.value = ''; factionSkillsL1.value = ''; factionSkillsL2.value = '';
         noSelection.style.display='none'; factionDetail.style.display='none';
         // create quickly
         const f = { id: uid(), name: 'New Faction', description: '', skills: '', units: [] };
@@ -813,6 +959,7 @@ function restoreUnitFormPosition(){
         }
         updateHeaderSource();
         renderFactions(); 
+        updateListUI();
         if(db.factions.length) { selectedFactionId = db.factions[0].id; selectFaction(selectedFactionId);}
     })();
 
