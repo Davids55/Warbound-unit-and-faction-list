@@ -389,6 +389,7 @@
                                 type: w.type || '',
                                 str: w.str || '',
                                 damage: w.damage || '',
+                                toHit: w.toHit || '',
                                 attacks: w.attacks || '',
                                 rulesKeywords: w.rulesKeywords || ''
                             })).filter(w => w.name);
@@ -407,8 +408,9 @@
                                     type: parts[2] || '',
                                     str: parts[3] || '',
                                     damage: parts[4] || '',
-                                    attacks: parts[5] || '',
-                                    rulesKeywords: parts.slice(6).join('|') || ''
+                                    toHit: parts.length >= 8 ? parts[5] || '' : '',
+                                    attacks: parts.length >= 8 ? parts[6] || '' : parts[5] || '',
+                                    rulesKeywords: parts.slice(parts.length >= 8 ? 7 : 6).join('|') || ''
                                 };
                             }
 
@@ -420,6 +422,7 @@
                                 type: '',
                                 str: '',
                                 damage: '',
+                                toHit: '',
                                 attacks: '',
                                 rulesKeywords: ''
                             };
@@ -580,7 +583,7 @@
             if(e.unitSnapshot.movement) lines.push(`Movement: ${e.unitSnapshot.movement}`);
             if(e.unitSnapshot.armour) lines.push(`Armour: ${e.unitSnapshot.armour}`);
             if(e.unitSnapshot.wounds) lines.push(`Wounds: ${e.unitSnapshot.wounds}`);
-            if(e.unitSnapshot.weapons && e.unitSnapshot.weapons.length){ lines.push('Weapons:'); e.unitSnapshot.weapons.forEach(w=> lines.push(` - ${w.name} ${w.range||''} ${w.type||''} S${w.str||''} D${w.damage||''} Att:${w.attacks||''} ${w.rulesKeywords||''}`)); }
+            if(e.unitSnapshot.weapons && e.unitSnapshot.weapons.length){ lines.push('Weapons:'); e.unitSnapshot.weapons.forEach(w=> lines.push(` - ${w.name} ${w.range||''} ${w.type||''} Hit:${w.toHit||''} S${w.str||''} D${w.damage||''} Att:${w.attacks||''} ${w.rulesKeywords||''}`)); }
             if(e.unitSnapshot.specialRules && e.unitSnapshot.specialRules.length){ lines.push('Special Rules:'); e.unitSnapshot.specialRules.forEach(r=> lines.push(` - ${r.title}: ${r.desc}`)); }
         });
         const blob = new Blob([lines.join('\n')], {type:'text/plain'});
@@ -776,7 +779,7 @@ let listState = { entries: [] }; // entries: {unitId,factionId,count,unitSnapsho
 
     function renderWeaponsSummary(weaps){
         if(!weaps || weaps.length===0) return '<div class="muted-small">None</div>';
-        return weaps.map(w=>`<div>${escapeHtml(w.name)} — ${escapeHtml(w.range||'-')}, ${escapeHtml(w.type||'-')}, S${escapeHtml(w.str||'-')}, D${escapeHtml(w.damage||'-')}${w.rulesKeywords ? ` [${escapeHtml(w.rulesKeywords)}]` : ''}</div>`).join('');
+        return weaps.map(w=>`<div>${escapeHtml(w.name)} — ${escapeHtml(w.range||'-')}, ${escapeHtml(w.type||'-')}, Hit${escapeHtml(w.toHit||'-')}, S${escapeHtml(w.str||'-')}, D${escapeHtml(w.damage||'-')}${w.rulesKeywords ? ` [${escapeHtml(w.rulesKeywords)}]` : ''}</div>`).join('');
     }
 
     // Forms handling
@@ -886,13 +889,14 @@ let listState = { entries: [] }; // entries: {unitId,factionId,count,unitSnapsho
             weapList.appendChild(e);
         });
     }
-    function weapRow(w={id:uid(),name:'',range:'',type:'',str:'',damage:'',attacks:'',rulesKeywords:''}){
+    function weapRow(w={id:uid(),name:'',range:'',type:'',toHit:'',str:'',damage:'',attacks:'',rulesKeywords:''}){
         const div = document.createElement('div');
         div.className='weap';
         div.innerHTML = `
             <input class="w-name" placeholder="Name" value="${escapeAttr(w.name)}" />
             <input class="w-range" placeholder="Range" value="${escapeAttr(w.range)}" />
             <input class="w-type" placeholder="Type" value="${escapeAttr(w.type)}" />
+            <input class="w-hit" placeholder="Hit" value="${escapeAttr(w.toHit)}" style="width:52px" />
             <input class="w-str" placeholder="S" value="${escapeAttr(w.str)}" style="width:52px" />
             <input class="w-dmg" placeholder="D" value="${escapeAttr(w.damage)}" style="width:52px" />
             <input class="w-atk" placeholder="Att" value="${escapeAttr(w.attacks)}" style="width:60px" />
@@ -914,6 +918,7 @@ let listState = { entries: [] }; // entries: {unitId,factionId,count,unitSnapsho
         name: n.querySelector('.w-name').value.trim(),
         range: n.querySelector('.w-range').value.trim(),
         type: n.querySelector('.w-type').value.trim(),
+        toHit: n.querySelector('.w-hit').value.trim(),
         str: n.querySelector('.w-str').value.trim(),
         damage: n.querySelector('.w-dmg').value.trim(),
         attacks: n.querySelector('.w-atk').value.trim(),
