@@ -779,7 +779,7 @@ let listState = { entries: [] }; // entries: {unitId,factionId,count,unitSnapsho
 
     function renderWeaponsSummary(weaps){
         if(!weaps || weaps.length===0) return '<div class="muted-small">None</div>';
-        return weaps.map(w=>`<div>${escapeHtml(w.name)} — ${escapeHtml(w.range||'-')}, ${escapeHtml(w.type||'-')}, Hit ${escapeHtml(w.toHit||'-')}, S${escapeHtml(w.str||'-')}, D${escapeHtml(w.damage||'-')}${w.rulesKeywords ? ` [${escapeHtml(w.rulesKeywords)}]` : ''}</div>`).join('');
+        return weaps.map(w=>`<div>${escapeHtml(w.name)} — ${escapeHtml(w.range||'-')}, ${escapeHtml(w.type||'-')}, Hit: ${escapeHtml(w.toHit||'-')}, S${escapeHtml(w.str||'-')}, D${escapeHtml(w.damage||'-')}${w.rulesKeywords ? ` [${escapeHtml(w.rulesKeywords)}]` : ''}</div>`).join('');
     }
 
     // Forms handling
