@@ -5,10 +5,11 @@ Features
 
 - sync to google sheets for storage
 - Gui for easy unit and faction edits
-
-To add
-- make the unit editor open under the units current place instead of at bottom of list
 - list builder on right hand of screen
+
+To add/update
 - mobile device version
+- tune the info shown when a list is saved
+- Bullet points for special rules?
 
 https://davids55.github.io/Warbound-unit-and-faction-list/
